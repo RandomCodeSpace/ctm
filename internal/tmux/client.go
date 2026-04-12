@@ -1,0 +1,226 @@
+package tmux
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+// IsInsideTmux returns true if the current process is running inside a tmux session.
+func IsInsideTmux() bool {
+	return os.Getenv("TMUX") != ""
+}
+
+// Client wraps tmux CLI commands.
+type Client struct {
+	confPath string
+}
+
+// NewClient creates a new Client using the given tmux config path.
+func NewClient(confPath string) *Client {
+	return &Client{confPath: confPath}
+}
+
+// HasSession returns true if a tmux session with the given name exists.
+func (c *Client) HasSession(name string) bool {
+	cmd := exec.Command("tmux", "has-session", "-t", name)
+	return cmd.Run() == nil
+}
+
+// SourceConfig loads the tmux config into the running server.
+// This is needed because tmux -f only applies when starting a new server.
+func (c *Client) SourceConfig() error {
+	if c.confPath == "" {
+		return nil
+	}
+	return exec.Command("tmux", "source-file", c.confPath).Run()
+}
+
+// NewSession creates a new detached tmux session.
+func (c *Client) NewSession(name, workdir, shellCmd string) error {
+	args := buildNewSessionArgs(name, workdir, c.confPath, shellCmd)
+	if err := exec.Command("tmux", args...).Run(); err != nil {
+		return err
+	}
+	// Source config into running server so mouse/scroll settings apply
+	return c.SourceConfig()
+}
+
+// Attach attaches to an existing tmux session, connecting stdin/stdout/stderr.
+func (c *Client) Attach(name string) error {
+	args := buildAttachArgs(name, c.confPath)
+	cmd := exec.Command("tmux", args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// SwitchClient switches the tmux client to the named session.
+func (c *Client) SwitchClient(name string) error {
+	args := buildSwitchArgs(name)
+	return exec.Command("tmux", args...).Run()
+}
+
+// Go navigates to the named session, switching if inside tmux or attaching otherwise.
+func (c *Client) Go(name string) error {
+	if IsInsideTmux() {
+		tty := clientTTY()
+		setTitle(tty, name)
+		return c.SwitchClient(name)
+	}
+	setTitleStdout(name)
+	return c.Attach(name)
+}
+
+// KillSession kills the named tmux session.
+func (c *Client) KillSession(name string) error {
+	return exec.Command("tmux", "kill-session", "-t", name).Run()
+}
+
+// KillServer kills the tmux server. Returns nil if there is no server running.
+func (c *Client) KillServer() error {
+	out, err := exec.Command("tmux", "kill-server").CombinedOutput()
+	if err != nil {
+		// "no server running" is not an error for our purposes
+		if strings.Contains(string(out), "no server") {
+			return nil
+		}
+		return fmt.Errorf("tmux kill-server: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// ListSessions returns a newline-separated list of sessions, or empty string if none.
+func (c *Client) ListSessions() (string, error) {
+	out, err := exec.Command("tmux", "list-sessions").Output()
+	if err != nil {
+		// tmux exits non-zero when there are no sessions; treat as empty
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// PaneCommand returns the start command of the first pane in the named session.
+func (c *Client) PaneCommand(name string) (string, error) {
+	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_start_command}").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// PanePID returns the PID of the first pane in the named session.
+func (c *Client) PanePID(name string) (string, error) {
+	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_pid}").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// RespawnPane respawns the pane in the named session with the given shell command.
+// The command is wrapped in /bin/sh -c so shell operators (||, &&) are interpreted.
+// Unlike new-session, respawn-pane does not invoke $SHELL -c automatically.
+func (c *Client) RespawnPane(name, shellCmd string) error {
+	args := buildRespawnPaneArgs(name, shellCmd)
+	return exec.Command("tmux", args...).Run()
+}
+
+// CurrentSession returns the name of the current tmux session.
+func (c *Client) CurrentSession() (string, error) {
+	out, err := exec.Command("tmux", "display-message", "-p", "#S").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// PaneCurrentPath returns the current working directory of the pane in the named session.
+func (c *Client) PaneCurrentPath(name string) (string, error) {
+	out, err := exec.Command("tmux", "display-message", "-t", name, "-p", "#{pane_current_path}").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// Detach detaches the current tmux client.
+func (c *Client) Detach() error {
+	return exec.Command("tmux", "detach-client").Run()
+}
+
+// RenameSession renames a tmux session.
+func (c *Client) RenameSession(oldName, newName string) error {
+	return exec.Command("tmux", "rename-session", "-t", oldName, newName).Run()
+}
+
+// ChooseSession opens the tmux session chooser, connecting stdin/stdout/stderr.
+func (c *Client) ChooseSession() error {
+	cmd := exec.Command("tmux", "choose-session")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// --- unexported helpers ---
+
+// buildNewSessionArgs constructs args for `tmux new-session`.
+// shellCmd is passed as a bare positional arg; tmux new-session passes it to
+// $SHELL -c internally, so shell operators (||, &&) work without explicit
+// wrapping. Note: tmux respawn-pane does NOT do this — see RespawnPane.
+// The UUID used in shellCmd is hex+hyphens only, so there is no metacharacter risk.
+func buildNewSessionArgs(name, workdir, confPath, shellCmd string) []string {
+	args := []string{}
+	if confPath != "" {
+		args = append(args, "-f", confPath)
+	}
+	args = append(args, "new-session", "-d", "-s", name, "-c", workdir, shellCmd)
+	return args
+}
+
+func buildAttachArgs(name, confPath string) []string {
+	args := []string{}
+	if confPath != "" {
+		args = append(args, "-f", confPath)
+	}
+	args = append(args, "attach-session", "-t", name)
+	return args
+}
+
+func buildSwitchArgs(name string) []string {
+	return []string{"switch-client", "-t", name}
+}
+
+func buildRespawnPaneArgs(name, shellCmd string) []string {
+	return []string{"respawn-pane", "-t", name, "-k", "/bin/sh", "-c", shellCmd}
+}
+
+// clientTTY returns the tty of the current tmux client.
+func clientTTY() string {
+	out, err := exec.Command("tmux", "display-message", "-p", "#{client_tty}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// setTitle writes an OSC title escape sequence to the given tty file path.
+func setTitle(tty, name string) {
+	if tty == "" {
+		return
+	}
+	f, err := os.OpenFile(tty, os.O_WRONLY, 0)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "\033]0;%s\007", name)
+}
+
+// setTitleStdout writes an OSC title escape sequence to stdout.
+func setTitleStdout(name string) {
+	fmt.Fprintf(os.Stdout, "\033]0;%s\007", name)
+}
