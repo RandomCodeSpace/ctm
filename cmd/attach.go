@@ -76,7 +76,7 @@ func createAndAttach(name, workdir, mode string, store *session.Store, tc *tmux.
 	out.Info("No session %q found — creating in %s", name, abs)
 
 	sess := session.New(name, abs, mode)
-	shellCmd := claude.BuildCommand(sess.UUID, mode, false, claude.OverlayPathIfExists(config.ClaudeOverlayPath()))
+	shellCmd := claude.BuildCommand(sess.UUID, mode, false, claude.OverlayPathIfExists(config.ClaudeOverlayPath()), claude.EnvFilePathIfExists(config.EnvFilePath()))
 
 	if err := tc.NewSession(name, abs, shellCmd); err != nil {
 		return fmt.Errorf("creating tmux session: %w", err)
@@ -134,7 +134,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 	tmuxResult := health.CheckTmuxSession(tc, sess.Name)
 	if !tmuxResult.Passed() {
 		out.Warn("tmux session %q missing — recreating", sess.Name)
-		shellCmd := claude.BuildCommand(sess.UUID, sess.Mode, true, claude.OverlayPathIfExists(config.ClaudeOverlayPath()))
+		shellCmd := claude.BuildCommand(sess.UUID, sess.Mode, true, claude.OverlayPathIfExists(config.ClaudeOverlayPath()), claude.EnvFilePathIfExists(config.EnvFilePath()))
 		if err := tc.NewSession(sess.Name, sess.Workdir, shellCmd); err != nil {
 			return fmt.Errorf("recreating tmux session: %w", err)
 		}
@@ -156,7 +156,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 	if !claudeResult.Passed() {
 		out.Debug(Verbose, "claude not running, restarting with --resume")
 		out.Warn("claude process dead — respawning")
-		shellCmd := claude.BuildCommand(sess.UUID, sess.Mode, true, claude.OverlayPathIfExists(config.ClaudeOverlayPath()))
+		shellCmd := claude.BuildCommand(sess.UUID, sess.Mode, true, claude.OverlayPathIfExists(config.ClaudeOverlayPath()), claude.EnvFilePathIfExists(config.EnvFilePath()))
 		if err := tc.RespawnPane(sess.Name, shellCmd); err != nil {
 			return fmt.Errorf("respawning pane: %w", err)
 		}

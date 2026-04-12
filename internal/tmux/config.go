@@ -31,8 +31,7 @@ bind -n M-[ copy-mode
 # Alt-d detaches the client (already used).
 bind -n M-d detach-client
 
-# Terminal type: screen-256color is universally available; tmux-256color is not.
-set -g default-terminal "screen-256color"
+set -g default-terminal "tmux-256color"
 set -ga terminal-overrides ",*256col*:Tc,xterm*:Tc"
 set -g allow-rename off
 set -sg escape-time 10

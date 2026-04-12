@@ -10,8 +10,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 var nameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$`)
@@ -61,7 +59,7 @@ func ValidateName(name string) error {
 func New(name, workdir, mode string) *Session {
 	return &Session{
 		Name:      name,
-		UUID:      uuid.New().String(),
+		UUID:      newUUIDv4(),
 		Mode:      mode,
 		Workdir:   workdir,
 		CreatedAt: time.Now().UTC(),

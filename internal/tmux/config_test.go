@@ -25,7 +25,7 @@ func TestGenerateConfig(t *testing.T) {
 		"set -g prefix2 M-a",
 		"bind -n M-[ copy-mode",
 		"bind -n M-d detach-client",
-		`set -g default-terminal "screen-256color"`,
+		`set -g default-terminal "tmux-256color"`,
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("config missing %q", want)

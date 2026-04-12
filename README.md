@@ -10,9 +10,12 @@ Mobile-first session manager for [Claude Code](https://claude.com/claude-code) r
 - **Crash-safe state.** Atomic writes, flock-based locking, corruption recovery on `sessions.json`.
 - **Resume with fallback.** `claude --resume UUID || claude --session-id UUID` — recovers from missing session data.
 - **Claude overlay.** Drop a `claude-overlay.json` to apply ctm-only settings (statusline, theme, etc.) without touching your global `~/.claude/settings.json`.
+- **ctm-only shell env.** `~/.config/ctm/env.sh` is sourced before claude spawns — set env vars like `CLAUDE_CODE_NO_FLICKER=1` that claude reads during startup (too early for settings.json's `env` key).
+- **Tool-use logging.** Built-in PostToolUse hook (pure Go, no jq/bash deps) writes one JSONL entry per tool call to `~/.config/ctm/logs/<session>.jsonl`. View with `ctm logs`.
 - **YOLO mode.** Auto-commits a git checkpoint before bypassing permissions, so you can always roll back.
 - **Preflight health checks.** Env vars, PATH, workdir, tmux session, claude process — cached for 60s to keep mobile reconnects snappy.
 - **OSC52 clipboard sync.** Copy in tmux, paste anywhere.
+- **Zero non-tmux runtime dependencies.** Pure Go throughout — native UUID, `/proc` walk, `filepath.WalkDir`. No `jq`, `pgrep`, `grep`, or `uuidgen` required.
 
 ## Installation
 
@@ -88,12 +91,23 @@ This generates `~/.config/ctm/config.json` and `~/.config/ctm/tmux.conf` and set
 
 | Command | Description |
 |---|---|
-| `ctm overlay` | Show overlay status (active / missing). |
-| `ctm overlay init` | Create a sample `~/.config/ctm/claude-overlay.json` with statusline + theme examples. |
-| `ctm overlay edit` | Open the overlay in `$EDITOR` (creates sample if missing). |
+| `ctm overlay` | Show overlay status (active / missing) with paths to sidecar files. |
+| `ctm overlay init` | Create a sample `~/.config/ctm/claude-overlay.json` + `statusline.sh` + `env.sh` + hooks wiring. |
+| `ctm overlay edit` | Open the overlay in `$EDITOR` (creates sidecars if missing). |
 | `ctm overlay path` | Print the overlay file path. |
 
-When the overlay file exists, ctm-spawned claude invocations get `--settings <path>` automatically. Direct `claude` invocations outside ctm are untouched.
+When the overlay file exists, ctm-spawned claude invocations get `--settings <path>` automatically, and `env.sh` is sourced by the shell before claude starts. Direct `claude` invocations outside ctm are untouched.
+
+### Logs
+
+| Command | Description |
+|---|---|
+| `ctm logs` | List sessions with tool-use logs, sorted by most recent. |
+| `ctm logs <session-id>` | Dump a session's formatted tool-use log. |
+| `ctm logs <session-id> -f` | Tail the log in real time. Handles rotation and truncation. |
+| `ctm logs <session-id> --raw` | Print raw JSONL lines (pipe to `jq` for scripting). |
+
+Logs are populated by a PostToolUse hook registered in the overlay. Each entry contains the full Claude Code hook payload plus a UTC timestamp. File perms 0600, session-id sanitized to prevent path traversal, concurrent writes coordinated via advisory flock.
 
 ## Keybindings
 
@@ -125,7 +139,10 @@ Claude Code's TUI uses alt-screen and has no built-in scroll history. The app-in
 - `~/.config/ctm/config.json` — main config (scrollback lines, required env vars, default mode, health check timeout, yolo checkpoint toggle)
 - `~/.config/ctm/sessions.json` — session state (atomically written, flock-locked)
 - `~/.config/ctm/tmux.conf` — generated tmux config (mobile-optimized, don't edit)
-- `~/.config/ctm/claude-overlay.json` — optional claude settings overlay
+- `~/.config/ctm/claude-overlay.json` — optional claude settings overlay (statusline, theme, hooks)
+- `~/.config/ctm/statusline.sh` — custom statusline script referenced by the overlay
+- `~/.config/ctm/env.sh` — shell env sourced before claude spawns (for early-binding env vars like `CLAUDE_CODE_NO_FLICKER`)
+- `~/.config/ctm/logs/<session-id>.jsonl` — per-session tool-use logs (0600)
 
 ## Upgrading
 

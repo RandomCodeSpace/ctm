@@ -1,1 +1,15 @@
+# Built binary
 ctm
+
+# Go coverage / profiling
+*.out
+*.test
+coverage.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
