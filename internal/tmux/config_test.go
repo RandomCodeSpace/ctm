@@ -21,6 +21,7 @@ func TestGenerateConfig(t *testing.T) {
 		"set -g history-limit 50000",
 		"set -g status-position top",
 		"set -sg escape-time 10",
+		"set -g focus-events on",
 		"set -g set-clipboard on",
 		"set -g prefix2 M-a",
 		"bind -n M-[ copy-mode",

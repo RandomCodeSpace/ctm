@@ -49,14 +49,11 @@ var safeCmd = &cobra.Command{
 
 func runYolo(cmd *cobra.Command, args []string) error {
 	out := output.Stdout()
-	cfg, err := config.Load(config.ConfigPath())
+	cfgPtr, err := ensureSetup()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return err
 	}
-
-	if err := tmux.GenerateConfig(config.TmuxConfPath(), cfg.ScrollbackLines); err != nil {
-		return fmt.Errorf("generating tmux config: %w", err)
-	}
+	cfg := *cfgPtr
 
 	store := session.NewStore(config.SessionsPath())
 	tc := tmux.NewClient(config.TmuxConfPath())
@@ -130,14 +127,11 @@ func runYolo(cmd *cobra.Command, args []string) error {
 
 func runYoloBang(cmd *cobra.Command, args []string) error {
 	out := output.Stdout()
-	cfg, err := config.Load(config.ConfigPath())
+	cfgPtr, err := ensureSetup()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return err
 	}
-
-	if err := tmux.GenerateConfig(config.TmuxConfPath(), cfg.ScrollbackLines); err != nil {
-		return fmt.Errorf("generating tmux config: %w", err)
-	}
+	cfg := *cfgPtr
 
 	store := session.NewStore(config.SessionsPath())
 	tc := tmux.NewClient(config.TmuxConfPath())
@@ -177,13 +171,8 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 
 func runSafe(cmd *cobra.Command, args []string) error {
 	out := output.Stdout()
-	cfg, err := config.Load(config.ConfigPath())
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	if err := tmux.GenerateConfig(config.TmuxConfPath(), cfg.ScrollbackLines); err != nil {
-		return fmt.Errorf("generating tmux config: %w", err)
+	if _, err := ensureSetup(); err != nil {
+		return err
 	}
 
 	store := session.NewStore(config.SessionsPath())

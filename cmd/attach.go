@@ -45,17 +45,14 @@ func runAttach(cmd *cobra.Command, args []string) error {
 	}
 
 	out := output.Stderr()
-	cfg, err := config.Load(config.ConfigPath())
+	cfgPtr, err := ensureSetup()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return err
 	}
+	cfg := *cfgPtr
 
 	store := session.NewStore(config.SessionsPath())
 	tc := tmux.NewClient(config.TmuxConfPath())
-
-	if err := tmux.GenerateConfig(config.TmuxConfPath(), cfg.ScrollbackLines); err != nil {
-		return fmt.Errorf("generating tmux config: %w", err)
-	}
 
 	sess, err := store.Get(name)
 	if err != nil {

@@ -35,11 +35,9 @@ go install github.com/RandomCodeSpace/ctm@latest
 
 ### Post-install
 
-```bash
-ctm install
-```
+No extra setup step is required — the first time you run any claude-launching command (`ctm`, `ctm <name>`, `ctm new`, `ctm yolo`), ctm bootstraps `~/.config/ctm/` with sensible defaults, regenerates `tmux.conf` on every launch, and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
 
-This generates `~/.config/ctm/config.json` and `~/.config/ctm/tmux.conf` and sets up shell integration.
+If you prefer an explicit setup step (or want the cc-session migration to run), `ctm install` still does the same work upfront.
 
 ## Requirements
 
@@ -139,8 +137,7 @@ Claude Code's TUI uses alt-screen and has no built-in scroll history. The app-in
 - `~/.config/ctm/config.json` — main config (scrollback lines, required env vars, default mode, health check timeout, yolo checkpoint toggle)
 - `~/.config/ctm/sessions.json` — session state (atomically written, flock-locked)
 - `~/.config/ctm/tmux.conf` — generated tmux config (mobile-optimized, don't edit)
-- `~/.config/ctm/claude-overlay.json` — optional claude settings overlay (statusline, theme, hooks)
-- `~/.config/ctm/statusline.sh` — custom statusline script referenced by the overlay
+- `~/.config/ctm/claude-overlay.json` — optional claude settings overlay (statusline, theme, hooks) — created on first launch
 - `~/.config/ctm/env.sh` — shell env sourced before claude spawns (for early-binding env vars like `CLAUDE_CODE_NO_FLICKER`)
 - `~/.config/ctm/logs/<session-id>.jsonl` — per-session tool-use logs (0600)
 
