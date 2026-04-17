@@ -23,6 +23,19 @@ func init() {
 	rootCmd.AddCommand(safeCmd)
 }
 
+// shouldResumeExisting reports whether a stored session should be resumed via
+// preflight rather than torn down and recreated. A session is resumable iff
+// its recorded mode matches the requested mode — tmux liveness is irrelevant
+// because preflight handles a dead tmux pane by recreating it with
+// `claude --resume UUID`, preserving the session's conversation history.
+//
+// Regression guard: the previous implementation also required the tmux session
+// to be live, which caused `ctm yolo <name>` after claude exited to delete the
+// stored UUID and spawn a fresh session, losing all chat history.
+func shouldResumeExisting(sess *session.Session, requestedMode string) bool {
+	return sess != nil && sess.Mode == requestedMode
+}
+
 var yoloCmd = &cobra.Command{
 	Use:               "yolo [name] [path]",
 	Short:             "Launch or relaunch a session in YOLO (unrestricted) mode",
@@ -41,7 +54,7 @@ var yoloBangCmd = &cobra.Command{
 
 var safeCmd = &cobra.Command{
 	Use:               "safe [name]",
-	Short:             "Force kill and relaunch a session in safe mode",
+	Short:             "Launch or relaunch a session in safe mode",
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: shell.SessionNameCompletion(),
 	RunE:              runSafe,
@@ -104,13 +117,17 @@ func runYolo(cmd *cobra.Command, args []string) error {
 
 	out.Magenta(">>> YOLO MODE")
 
-	// If session exists + running + already yolo → run pre-flight then attach
+	// If session exists and mode matches → preflight. preflight handles both
+	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
+	// so the session's claude history survives `claude` exiting on its own.
+	// Only kill/delete when the mode actually changes (safe → yolo) or when
+	// the user forces fresh state via `ctm yolo!` / `ctm kill`.
 	if sess, err := store.Get(name); err == nil {
-		if sess.Mode == "yolo" && tc.HasSession(name) {
-			out.Debug(Verbose, "session already yolo, running pre-flight")
+		if shouldResumeExisting(sess, "yolo") {
+			out.Debug(Verbose, "existing yolo session %q — running pre-flight", name)
 			return preflight(sess, cfg, store, tc, out)
 		}
-		// Kill existing
+		// Mode change: drop tmux + store record so a fresh UUID is minted.
 		if tc.HasSession(name) {
 			if err := tc.KillSession(name); err != nil {
 				out.Warn("could not kill existing session: %v", err)
@@ -171,9 +188,11 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 
 func runSafe(cmd *cobra.Command, args []string) error {
 	out := output.Stdout()
-	if _, err := ensureSetup(); err != nil {
+	cfgPtr, err := ensureSetup()
+	if err != nil {
 		return err
 	}
+	cfg := *cfgPtr
 
 	store := session.NewStore(config.SessionsPath())
 	tc := tmux.NewClient(config.TmuxConfPath())
@@ -194,14 +213,24 @@ func runSafe(cmd *cobra.Command, args []string) error {
 
 	out.Success(">>> SAFE MODE")
 
-	if tc.HasSession(name) {
-		if err := tc.KillSession(name); err != nil {
-			out.Warn("could not kill existing session: %v", err)
+	// If session exists and mode matches → preflight. preflight handles both
+	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
+	// so the session's claude history survives `claude` exiting on its own.
+	// Force-fresh escape hatches: `ctm kill <name>` / `ctm forget <name>`.
+	if sess, err := store.Get(name); err == nil {
+		if shouldResumeExisting(sess, "safe") {
+			out.Debug(Verbose, "existing safe session %q — running pre-flight", name)
+			return preflight(sess, cfg, store, tc, out)
 		}
-	}
-	if err := store.Delete(name); err != nil {
-		// ignore "not found" errors
-		_ = err
+		// Mode change: drop tmux + store record so a fresh UUID is minted.
+		if tc.HasSession(name) {
+			if err := tc.KillSession(name); err != nil {
+				out.Warn("could not kill existing session: %v", err)
+			}
+		}
+		if err := store.Delete(name); err != nil {
+			_ = err
+		}
 	}
 
 	return createAndAttach(name, workdir, "safe", store, tc, out)
