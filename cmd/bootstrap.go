@@ -37,6 +37,7 @@ func ensureSetup() (*config.Config, error) {
 	_ = ensureOverlaySidecars()
 	_ = ensureAliases()
 	_ = ensureClaudeRemoteControlDefault()
+	_ = ensureClaudeTUIFullscreenDefault()
 	return &cfg, nil
 }
 
@@ -51,6 +52,19 @@ func ensureClaudeRemoteControlDefault() error {
 		return err
 	}
 	return claude.EnsureRemoteControlAtStartup(path)
+}
+
+// ensureClaudeTUIFullscreenDefault pins Claude Code's TUI renderer to
+// "fullscreen" in ~/.claude/settings.json when the key is absent or set to
+// "default". Any other explicit value (e.g., "compact") is treated as a
+// deliberate user choice and left alone. See
+// internal/claude.EnsureTUIFullscreen for the full contract.
+func ensureClaudeTUIFullscreenDefault() error {
+	path, err := claude.SettingsJSONPath()
+	if err != nil {
+		return err
+	}
+	return claude.EnsureTUIFullscreen(path)
 }
 
 // ensureOverlaySidecars writes claude-overlay.json, env.sh, and the
