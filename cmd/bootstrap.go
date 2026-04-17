@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/RandomCodeSpace/ctm/internal/claude"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/shell"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -35,7 +36,21 @@ func ensureSetup() (*config.Config, error) {
 	}
 	_ = ensureOverlaySidecars()
 	_ = ensureAliases()
+	_ = ensureClaudeRemoteControlDefault()
 	return &cfg, nil
+}
+
+// ensureClaudeRemoteControlDefault opts new Claude Code installs into Remote
+// Control by default. Never creates ~/.claude.json, never overwrites an
+// explicit user choice (true or false) — only fills in the key when it is
+// absent. See internal/claude.EnsureRemoteControlAtStartup for the full
+// contract. Errors are swallowed; this is convenience, not correctness.
+func ensureClaudeRemoteControlDefault() error {
+	path, err := claude.ClaudeJSONPath()
+	if err != nil {
+		return err
+	}
+	return claude.EnsureRemoteControlAtStartup(path)
 }
 
 // ensureOverlaySidecars writes claude-overlay.json, env.sh, and the
