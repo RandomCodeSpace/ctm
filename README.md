@@ -138,7 +138,7 @@ Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `c
 
 ## Requirements
 
-- Go 1.22+ (for `go install`)
+- Go 1.25+ (for `go install`)
 - tmux 3.0+
 - [Claude Code CLI](https://claude.com/claude-code) on `$PATH`
 - A terminal that speaks xterm + OSC52 (Termius, WebSSH, iTerm2, Kitty, wezterm, Windows Terminal)

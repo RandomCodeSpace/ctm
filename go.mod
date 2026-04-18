@@ -1,6 +1,6 @@
 module github.com/RandomCodeSpace/ctm
 
-go 1.22
+go 1.25.0
 
 require (
 	github.com/chzyer/readline v1.5.1
