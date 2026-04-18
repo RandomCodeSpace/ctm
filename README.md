@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/RandomCodeSpace/ctm/releases"><img src="https://img.shields.io/github/v/release/RandomCodeSpace/ctm?color=blue&include_prereleases&sort=semver" alt="Latest release"></a>
   <a href="https://goreportcard.com/report/github.com/RandomCodeSpace/ctm"><img src="https://goreportcard.com/badge/github.com/RandomCodeSpace/ctm" alt="Go Report Card"></a>
-  <img src="https://img.shields.io/badge/go-1.22%2B-00ADD8" alt="Go 1.22+">
+  <img src="https://img.shields.io/github/go-mod/go-version/RandomCodeSpace/ctm?color=00ADD8&label=go" alt="Go version">
   <a href="https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RandomCodeSpace/ctm?color=green" alt="License MIT"></a>
 </p>
 
