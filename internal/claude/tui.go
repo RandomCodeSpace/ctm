@@ -18,6 +18,34 @@ func SettingsJSONPath() (string, error) {
 	return filepath.Join(home, ".claude", "settings.json"), nil
 }
 
+// ReadEffortLevel returns the current effort level stored under the
+// "effortLevel" key in path (typically ~/.claude/settings.json). Values
+// in the wild: "min" / "low" / "medium" / "high" / "xhigh" / "max".
+//
+// Returns "" when the file is missing, unreadable, unparseable, the key
+// is absent, or the value is not a string — intentionally silent so
+// callers (the statusline renderer) can display nothing on missing data
+// without a noisy error path.
+func ReadEffortLevel(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return ""
+	}
+	raw, ok := obj["effortLevel"]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return s
+}
+
 // EnsureTUIFullscreen pins "tui": "fullscreen" in Claude Code's settings.json
 // when the key is absent OR explicitly set to "default". Any other value is
 // treated as an intentional user choice and left untouched.

@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/RandomCodeSpace/ctm/internal/claude"
 )
 
 func init() {
@@ -183,6 +185,17 @@ func buildHeader(in *statuslineInput) string {
 	}
 }
 
+// readEffortLevel is a cmd-package-local wrapper so other renderers can
+// pick up the current effort level without duplicating the path dance.
+// Silent on every error path — effort is a nice-to-have, not critical.
+func readEffortLevel() string {
+	p, err := claude.SettingsJSONPath()
+	if err != nil {
+		return ""
+	}
+	return claude.ReadEffortLevel(p)
+}
+
 // buildContextLine builds the `c <pct>% (<tokens>)` segment of line 2.
 // The context-window-used percentage is the primary signal; the
 // parenthesised token sum (input + cache_creation + cache_read, per
@@ -217,7 +230,21 @@ func buildTokenLine(in *statuslineInput) string {
 	}
 	add('↑', cTokIn, in.ContextWindow.TotalInputTokens)
 	add('↓', cTokOut, in.ContextWindow.TotalOutputTokens)
-	return strings.Join(parts, "  ")
+	line := strings.Join(parts, "  ")
+
+	// Tack the current effort level onto the last line. Sourced from
+	// ~/.claude/settings.json via readEffortLevel — not in Claude
+	// Code's statusLine payload. Dim-gray so it reads as secondary
+	// info next to the token counts. Only appended when at least one
+	// token is present so a truly empty payload doesn't render a
+	// lone "· xhigh" orphan.
+	if line == "" {
+		return ""
+	}
+	if effort := readEffortLevel(); effort != "" {
+		line += fmt.Sprintf("  %s· %s%s", cDimGray, effort, cReset)
+	}
+	return line
 }
 
 // buildRateLimitLine renders `w <pct>%` and `h <pct>%` for weekly and
