@@ -90,6 +90,9 @@ func buildSampleOverlay(statuslineCmd, logHookCmd string) string {
     "command": %q
   },
   "theme": "dark",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "hooks": {
     "PostToolUse": [
       {
@@ -108,16 +111,18 @@ func buildSampleOverlay(statuslineCmd, logHookCmd string) string {
 }
 
 // sampleEnvFile is the bash env script sourced by the tmux shell before
-// claude launches. Use this for env vars that claude reads during CLI
+// claude launches. Use this for env vars that claude reads DURING CLI
 // startup, which are too early for settings.json's env key to affect.
+// Most env vars (including CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS) can
+// go in claude-overlay.json's env block instead and should — settings
+// is the canonical home per Claude Code's docs.
 const sampleEnvFile = `# ctm-managed env file — sourced by the shell that spawns claude.
 # Only affects claude processes launched via ctm. Direct 'claude' calls
 # outside ctm are unaffected (this file is never sourced then).
 #
-# Add exports here for env vars claude reads early in startup.
-
-# Enable experimental Agent Teams feature.
-export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+# Use this file only for env vars that claude reads too early in
+# startup for settings.json's "env" block to take effect. For anything
+# else, prefer the overlay at ~/.config/ctm/claude-overlay.json.
 `
 
 // writeEnvFile writes the default env.sh to path, creating parent dirs.
