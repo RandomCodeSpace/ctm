@@ -116,7 +116,6 @@ const (
 	cMagenta  = "\x1b[1;38;5;220m" // weekly bar
 	cYellow   = "\x1b[1;38;5;208m" // 5-hour bar
 	cHdrModel = "\x1b[1;97m"
-	cHdrSep   = "\x1b[90m"
 	cTokIn   = "\x1b[1;38;5;33m"
 	cTokOut  = "\x1b[1;38;5;37m"
 	cDimGray = "\x1b[90m"
@@ -181,7 +180,7 @@ func buildHeader(in *statuslineInput) string {
 		if url != "" {
 			projSeg = fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, projSeg)
 		}
-		return cHdrModel + parts[0] + cReset + cHdrSep + " · " + cReset + projSeg
+		return cHdrModel + parts[0] + cReset + "  " + projSeg
 	}
 }
 
@@ -242,7 +241,7 @@ func buildTokenLine(in *statuslineInput) string {
 		return ""
 	}
 	if effort := readEffortLevel(); effort != "" {
-		line += fmt.Sprintf("  %s· %s%s", cDimGray, effort, cReset)
+		line += fmt.Sprintf("  %s%s%s", cDimGray, effort, cReset)
 	}
 	return line
 }
