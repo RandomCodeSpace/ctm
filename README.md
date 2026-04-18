@@ -1,21 +1,56 @@
-# ctm — Claude Tmux Manager
+<h1 align="center">ctm</h1>
 
-Mobile-first session manager for [Claude Code](https://claude.com/claude-code) running in tmux. Survive SSH drops, reconnect from anywhere, one-tap resume, ctm-only claude customizations without touching your global config.
+<p align="center"><i>Claude Tmux Manager — survive SSH drops, reattach from your phone.</i></p>
+
+<p align="center">
+  <a href="https://github.com/RandomCodeSpace/ctm/releases"><img src="https://img.shields.io/github/v/release/RandomCodeSpace/ctm?color=blue&include_prereleases&sort=semver" alt="Latest release"></a>
+  <a href="https://goreportcard.com/report/github.com/RandomCodeSpace/ctm"><img src="https://goreportcard.com/badge/github.com/RandomCodeSpace/ctm" alt="Go Report Card"></a>
+  <img src="https://img.shields.io/badge/go-1.22%2B-00ADD8" alt="Go 1.22+">
+  <a href="https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RandomCodeSpace/ctm?color=green" alt="License MIT"></a>
+</p>
+
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#commands">Commands</a> ·
+  <a href="#mobile-scroll">Mobile</a> ·
+  <a href="#configuration">Config</a> ·
+  <a href="#statusline">Statusline</a>
+</p>
+
+## Quickstart
+
+```bash
+go install github.com/RandomCodeSpace/ctm@latest
+ctm                    # launches tmux + claude; drop SSH, reattach anytime
+ctm last               # one-word reconnect from your phone
+```
+
+That's it. `ctm` bootstraps `~/.config/ctm/` on first run and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
+
+## Why ctm?
+
+Claude Code on a remote dev box is great until your train enters a tunnel. Plain SSH + a direct `claude` invocation dies with the connection; reconnecting starts from scratch. **ctm wraps claude in tmux with mobile-first defaults** — Alt-based keybindings, OSC52 clipboard, one-keystroke session pickers, stale-session markers — so the conversation keeps running while you're underground, and reattaches from your phone with a single word.
+
+```
+Opus 4.7 (1M)  ~/projects/ctm
+c 49% (486.8k)  w 34%  h 25%
+↑ 118.6k  ↓ 434.8k  xhigh
+```
+
+(Above: the 3-line statusline ctm ships. Context fill + rate limits + cumulative tokens + current `/effort`, all from one hook.)
 
 ## Features
 
+- **Mobile-first workflow.** `ctm last`, `ctm pick <filter>`, `Alt-a` second prefix, OSC52 clipboard sync, stale-session markers — the entire UX assumes you're on a phone with flaky Wi-Fi and a fat thumb.
 - **Persistent sessions.** tmux-backed. Claude keeps running when SSH drops; reattach from any device.
-- **Mobile-friendly workflow.** `ctm last`, `ctm pick`, stale-session markers, Alt-a prefix alternative.
-- **Tight lifecycle coupling.** When claude exits, the tmux session dies. No more stuck bash shells.
-- **Crash-safe state.** Atomic writes, flock-based locking, corruption recovery on `sessions.json`.
-- **Resume with fallback.** `claude --resume UUID || claude --session-id UUID` — recovers from missing session data.
-- **Claude overlay.** Drop a `claude-overlay.json` to apply ctm-only settings (statusline, theme, etc.) without touching your global `~/.claude/settings.json`.
-- **ctm-only shell env.** `~/.config/ctm/env.sh` is sourced before claude spawns — set env vars (API keys, experimental flags) that claude reads during startup, too early for settings.json's `env` key.
-- **Tool-use logging.** Built-in PostToolUse hook (pure Go, no jq/bash deps) writes one JSONL entry per tool call to `~/.config/ctm/logs/<session>.jsonl`. View with `ctm logs`.
+- **Resume with fallback.** `claude --resume UUID || claude --session-id UUID` — recovers cleanly when session history is missing.
+- **Tool-use logging.** Built-in PostToolUse hook writes one JSONL line per tool call; `ctm logs --since 7d --tool Bash --grep pattern` queries transparently across rotated history.
+- **Claude overlay.** `claude-overlay.json` applies ctm-only settings (statusline, theme, hooks) without touching your global `~/.claude/settings.json`.
 - **YOLO mode.** Auto-commits a git checkpoint before bypassing permissions, so you can always roll back.
-- **Preflight health checks.** Env vars, PATH, workdir, tmux session, claude process — cached for 60s to keep mobile reconnects snappy.
-- **OSC52 clipboard sync.** Copy in tmux, paste anywhere.
-- **Zero non-tmux runtime dependencies.** Pure Go throughout — native UUID, `/proc` walk, `filepath.WalkDir`. No `jq`, `pgrep`, `grep`, or `uuidgen` required.
+- **Preflight health checks.** Env vars, PATH, workdir, tmux session, claude process — cached for 60 s to keep mobile reconnects snappy.
+- **Tight lifecycle coupling.** When claude exits, the tmux session dies. No stuck bash shells, no zombie tabs.
+- **Crash-safe state.** Atomic writes, flock-based locking, strict JSON decode with self-healing strip-to-.bak, `schema_version` + startup migrations on `sessions.json` / `config.json`.
+- **Zero non-tmux runtime deps.** Pure Go throughout. No `jq`, `pgrep`, `grep`, or `uuidgen` required.
 
 ## Installation
 
@@ -39,7 +74,10 @@ No extra setup step is required — the first time you run any claude-launching 
 
 If you prefer an explicit setup step (or want the cc-session migration to run), `ctm install` still does the same work upfront.
 
-### Lifecycle hooks
+<details>
+<summary><b>Lifecycle hooks</b> — fire shell commands on <code>on_attach</code> / <code>on_new</code> / <code>on_yolo</code> / <code>on_safe</code> / <code>on_kill</code></summary>
+
+&nbsp;
 
 ctm can fire a user-supplied shell command on five lifecycle events. Declare them under `hooks` in `~/.config/ctm/config.json`:
 
@@ -68,7 +106,12 @@ Each command runs through `sh -c` with the following env vars:
 
 Hooks run **synchronously** with a per-hook wall-clock ceiling (default 5 s, override via `hook_timeout_seconds`). Failures log a WARN-level slog line and are otherwise ignored — they never block the action that triggered them. For fire-and-forget semantics, append `&` inside the shell command.
 
-### Shell completion
+</details>
+
+<details>
+<summary><b>Shell completion</b> — bash / zsh / fish / powershell</summary>
+
+&nbsp;
 
 `ctm completion [bash|zsh|fish|powershell]` emits a completion script on stdout. Install per shell:
 
@@ -90,6 +133,8 @@ ctm completion powershell | Out-String | Invoke-Expression
 ```
 
 Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `ctm rename`, etc.) live session names pulled from `~/.config/ctm/sessions.json`.
+
+</details>
 
 ## Requirements
 
@@ -213,16 +258,19 @@ Inside any ctm tmux session:
 
 ## Mobile scroll
 
-Claude Code's TUI uses alt-screen and has no built-in scroll history. The app-intended workflow for scrollback on mobile is:
+> **The mobile scrollback trick.** Claude Code's TUI uses alt-screen and has no built-in scroll history. To scroll back on a phone:
+>
+> 1. Press **`Alt-[`** (or `Ctrl-b [`) — enters tmux copy mode.
+> 2. Swipe / arrow keys to scroll.
+> 3. `q` to exit.
 
-1. Enter tmux copy mode via **`Alt-[`** (or `Ctrl-b [`)
-2. Swipe / arrow keys to scroll
-3. `q` to exit
+**Termius / WebSSH users:** Wire Alt-[ to a one-tap icon with a Snippet.
 
-**Termius / WebSSH users:** Create a Snippet for one-tap access.
-- Name: `scroll`
-- Content: `<M-[>` (Alt-[)
-- Assign an icon → tap the icon → instant copy mode.
+| Field | Value |
+|---|---|
+| Name | `scroll` |
+| Content | `<M-[>` (Alt-[) |
+| Assign icon | any — tap it for instant copy mode |
 
 ## Configuration
 
