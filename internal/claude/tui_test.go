@@ -180,3 +180,43 @@ func TestEnsureTUIFullscreen_Idempotent(t *testing.T) {
 		t.Errorf("second run modified file:\nfirst:  %s\nsecond: %s", first, second)
 	}
 }
+
+// TestEnsureTUIFullscreen_IdempotentFromDefault locks in that the
+// "default" → "fullscreen" upgrade path is itself idempotent: run 1
+// upgrades, run 2 must be a no-op because the value is no longer "default".
+// The generic Idempotent test above only covers the absent-key path.
+func TestEnsureTUIFullscreen_IdempotentFromDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"tui":"default","theme":"dark"}`), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	if err := EnsureTUIFullscreen(path); err != nil {
+		t.Fatalf("run 1: %v", err)
+	}
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read 1: %v", err)
+	}
+
+	var firstObj map[string]json.RawMessage
+	if err := json.Unmarshal(first, &firstObj); err != nil {
+		t.Fatalf("parsing run 1: %v", err)
+	}
+	if got := string(firstObj["tui"]); got != `"fullscreen"` {
+		t.Fatalf("after run 1: tui = %s, want \"fullscreen\"", got)
+	}
+
+	if err := EnsureTUIFullscreen(path); err != nil {
+		t.Fatalf("run 2: %v", err)
+	}
+	second, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read 2: %v", err)
+	}
+
+	if string(first) != string(second) {
+		t.Errorf("second run modified file:\nfirst:  %s\nsecond: %s", first, second)
+	}
+}
