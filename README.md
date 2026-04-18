@@ -19,13 +19,24 @@
 
 ## Quickstart
 
+Download the prebuilt binary for your platform (no Go toolchain needed):
+
 ```bash
-go install github.com/RandomCodeSpace/ctm@latest
+# Linux x86_64 — adjust URL for your OS/arch (see below).
+curl -LO https://github.com/RandomCodeSpace/ctm/releases/latest/download/ctm-$(curl -s https://api.github.com/repos/RandomCodeSpace/ctm/releases/latest | jq -r .tag_name)-linux-amd64.tar.gz
+tar xzf ctm-*-linux-amd64.tar.gz && sudo mv ctm-*/ctm /usr/local/bin/
+
 ctm                    # launches tmux + claude; drop SSH, reattach anytime
 ctm last               # one-word reconnect from your phone
 ```
 
-That's it. `ctm` bootstraps `~/.config/ctm/` on first run and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
+Or with Go installed:
+
+```bash
+go install github.com/RandomCodeSpace/ctm@latest
+```
+
+Either way, `ctm` bootstraps `~/.config/ctm/` on first run and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
 
 ## Why ctm?
 
@@ -151,10 +162,11 @@ Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `c
 
 ## Requirements
 
-- Go 1.25+ (for `go install`)
 - tmux 3.0+
 - [Claude Code CLI](https://claude.com/claude-code) on `$PATH`
 - A terminal that speaks xterm + OSC52 (Termius, WebSSH, iTerm2, Kitty, wezterm, Windows Terminal)
+- Go 1.25+ — **only** if you build from source (`go install`); prebuilt binaries have no Go dependency
+- Linux or macOS — Windows is not supported natively; use WSL
 
 ## Commands
 
