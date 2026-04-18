@@ -89,9 +89,27 @@ jobs:
           {
             echo "## Install"
             echo
+            echo '### Prebuilt binary (fastest)'
+            echo
+            echo 'Download the archive for your platform from the assets below, extract, and drop `ctm` into a directory on your `$PATH`. Archives include the binary plus `LICENSE` and `README.md`.'
+            echo
+            echo '| Platform | Asset |'
+            echo '|---|---|'
+            echo "| Linux x86_64 | \`ctm-${VERSION}-linux-amd64.tar.gz\` |"
+            echo "| Linux ARM64 | \`ctm-${VERSION}-linux-arm64.tar.gz\` |"
+            echo "| macOS (Intel) | \`ctm-${VERSION}-darwin-amd64.tar.gz\` |"
+            echo "| macOS (Apple Silicon) | \`ctm-${VERSION}-darwin-arm64.tar.gz\` |"
+            echo "| Windows x86_64 | \`ctm-${VERSION}-windows-amd64.zip\` |"
+            echo
+            echo '### From source'
+            echo
             echo '```bash'
             echo "go install github.com/${{ github.repository }}@$VERSION"
             echo '```'
+            echo
+            echo '### Air-gapped'
+            echo
+            echo "The \`ctm-${VERSION}-src.tar.gz\` archive is a vendored source tree (\`go mod vendor\` populated) that builds offline with \`go build .\`."
             echo
             echo "## Changes"
             echo
@@ -116,22 +134,19 @@ jobs:
           git tag -a "$VERSION" -m "Release $VERSION"
           git push origin "$VERSION"
 
-      - name: Build release artifacts (vendored source tarball + checksums)
+      - name: Build release artifacts (cross-platform binaries + source + checksums)
         env:
           VERSION: ${{ steps.version.outputs.next }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p dist
 
-          # Vendor deps so the tarball builds offline (rules/build.md:
-          # air-gapped deploys require vendored dependencies).
+          # --- Source tarball (vendored, for air-gapped builds) ---
+          #
+          # `go mod vendor` populates vendor/ so downstream `go build`
+          # works without public internet (rules/build.md).
           go mod vendor
-
-          # Deterministic tarball of the source tree at this tag, with
-          # a top-level ctm-<VERSION>/ prefix for friendly extraction.
-          # Exclude transient artefacts (.git, dist, node_modules, etc.)
-          # while keeping vendor/ and hidden dotfiles that are part of
-          # the release (.github, .gitignore).
           tar \
             --transform "s,^\\.,ctm-${VERSION}," \
             --exclude='./.git' \
@@ -140,9 +155,45 @@ jobs:
             -czf "dist/ctm-${VERSION}-src.tar.gz" \
             .
 
-          # SHA256SUMS over every artifact in dist/. Format is the GNU
-          # coreutils standard (`sha256sum -c SHA256SUMS` verifies).
-          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+          # --- Cross-compiled binaries ---
+          #
+          # ctm is pure Go (no cgo), so Go's native cross-compile is
+          # enough — no gcc-mingw tooling required. Each binary is
+          # built with:
+          #   -trimpath       : strip workspace paths for reproducibility
+          #   -s -w           : drop debug info + symbol table (~30% smaller)
+          #   -X ...Version=  : inject the release tag so `ctm version` reports it
+          LDFLAGS="-s -w -X github.com/${REPO}/cmd.Version=${VERSION}"
+
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
+            goos="${target%-*}"
+            goarch="${target#*-}"
+            stage="ctm-${VERSION}-${target}"
+            mkdir -p "dist/${stage}"
+
+            ext=""
+            if [ "$goos" = "windows" ]; then ext=".exe"; fi
+
+            echo "→ building ${target}"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -trimpath -ldflags "$LDFLAGS" \
+              -o "dist/${stage}/ctm${ext}" \
+              ./
+
+            cp LICENSE README.md "dist/${stage}/"
+
+            if [ "$goos" = "windows" ]; then
+              (cd dist && zip -qr "${stage}.zip" "${stage}" && rm -rf "${stage}")
+            else
+              (cd dist && tar -czf "${stage}.tar.gz" "${stage}" && rm -rf "${stage}")
+            fi
+          done
+
+          # --- SHA256SUMS over every artifact ---
+          #
+          # GNU coreutils format (`sha256sum -c SHA256SUMS` verifies).
+          (cd dist && sha256sum ctm-*.tar.gz ctm-*.zip > SHA256SUMS)
+
           echo "Artifacts:"
           ls -lh dist
           echo "Checksums:"
@@ -175,5 +226,6 @@ jobs:
           gh release create "$VERSION" \
             --title "$VERSION" \
             --notes-file release-notes.md \
-            "dist/ctm-${VERSION}-src.tar.gz" \
+            dist/ctm-*.tar.gz \
+            dist/ctm-*.zip \
             dist/SHA256SUMS

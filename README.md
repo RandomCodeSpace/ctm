@@ -6,7 +6,7 @@
   <a href="https://github.com/RandomCodeSpace/ctm/releases"><img src="https://img.shields.io/github/v/release/RandomCodeSpace/ctm?color=blue&include_prereleases&sort=semver" alt="Latest release"></a>
   <a href="https://goreportcard.com/report/github.com/RandomCodeSpace/ctm"><img src="https://goreportcard.com/badge/github.com/RandomCodeSpace/ctm" alt="Go Report Card"></a>
   <img src="https://img.shields.io/github/go-mod/go-version/RandomCodeSpace/ctm?color=00ADD8&label=go" alt="Go version">
-  <a href="https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RandomCodeSpace/ctm?color=green" alt="License MIT"></a>
+  <a href="https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT"></a>
 </p>
 
 <p align="center">
@@ -53,6 +53,20 @@ c 49% (486.8k)  w 34%  h 25%
 - **Zero non-tmux runtime deps.** Pure Go throughout. No `jq`, `pgrep`, `grep`, or `uuidgen` required.
 
 ## Installation
+
+### Prebuilt binary
+
+Grab the archive for your platform from the [latest release](https://github.com/RandomCodeSpace/ctm/releases/latest), extract, and drop `ctm` into a directory on your `$PATH`:
+
+| Platform | Asset |
+|---|---|
+| Linux x86_64 | `ctm-<version>-linux-amd64.tar.gz` |
+| Linux ARM64 | `ctm-<version>-linux-arm64.tar.gz` |
+| macOS (Intel) | `ctm-<version>-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | `ctm-<version>-darwin-arm64.tar.gz` |
+| Windows x86_64 | `ctm-<version>-windows-amd64.zip` |
+
+Every asset is accompanied by a `SHA256SUMS` file; verify with `sha256sum -c SHA256SUMS`.
 
 ### Version-pinned (recommended)
 
