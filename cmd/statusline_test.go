@@ -25,23 +25,36 @@ func TestRenderStatuslineFullPayload(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines, got %d:\n%s", len(lines), out)
 	}
-	// Header: short model + project
-	if !strings.Contains(lines[0], "sonnet (1M)") {
-		t.Errorf("header missing shortened model: %q", lines[0])
+	// Line 0 — Header: full model name (minus the redundant "Claude "
+	// prefix) plus the project tail.
+	if !strings.Contains(lines[0], "Sonnet 4.5 (1M)") {
+		t.Errorf("header missing full model name: %q", lines[0])
 	}
 	if !strings.Contains(lines[0], "ctm-statusline-fake") {
 		t.Errorf("header missing project tail: %q", lines[0])
 	}
-	// Bars: labels c/w/h
-	for _, want := range []string{"c", "w", "h", "━", "─"} {
+	// Line 1 — Context + rate limits share one line now: c / w / h.
+	for _, want := range []string{"c", "25%", "w", "40%", "h", "10%"} {
 		if !strings.Contains(lines[1], want) {
-			t.Errorf("bars missing %q: %q", want, lines[1])
+			t.Errorf("line 2 missing %q: %q", want, lines[1])
 		}
 	}
-	// Tokens: 12345 rendered as 12.3k, 6789 as 6.8k, 500 as 500
-	for _, want := range []string{"↑", "↓", "⚡", "12.3k", "6.8k", "500"} {
+	// ⚡ should NOT appear anywhere — cache was dropped as a separate
+	// statusline entry. (The cache_read value may still contribute to
+	// the parenthesised context-tokens sum, which is expected.)
+	if strings.Contains(out, "⚡") {
+		t.Errorf("cache glyph ⚡ should have been removed:\n%s", out)
+	}
+	// Line 2 — Tokens: input + output only.
+	for _, want := range []string{"↑", "↓", "12.3k", "6.8k"} {
 		if !strings.Contains(lines[2], want) {
 			t.Errorf("token line missing %q: %q", want, lines[2])
+		}
+	}
+	// No bar runes should appear anywhere.
+	for _, bar := range []string{"━", "─"} {
+		if strings.Contains(out, bar) {
+			t.Errorf("unexpected bar rune %q in output:\n%s", bar, out)
 		}
 	}
 }
@@ -62,18 +75,24 @@ func TestRenderStatuslineSkipsMissingFields(t *testing.T) {
 	}
 }
 
-func TestRenderStatuslineDefaultMarkerSkipped(t *testing.T) {
-	// Sonnet's default 200K marker should be elided.
-	if got := shortenModel("Claude Sonnet 4.5 (200K)"); got != "sonnet" {
-		t.Errorf("want 'sonnet' (marker elided), got %q", got)
+func TestFormatModel(t *testing.T) {
+	cases := map[string]string{
+		"Claude Sonnet 4.5 (1M)":             "Sonnet 4.5 (1M)",
+		"Claude Sonnet 4.5 (200K)":           "Sonnet 4.5 (200K)",
+		"Claude Opus 4.7 (1M context)":       "Opus 4.7 (1M)",
+		"Claude Sonnet 4.5 (1M context)":     "Sonnet 4.5 (1M)",
+		"Claude Sonnet 4.5 (200K context)":   "Sonnet 4.5 (200K)",
+		"Claude Opus 4.7":                    "Opus 4.7",
+		"claude-sonnet-4-5-20250929":         "sonnet-4-5-20250929",
+		"claude-opus-4-7":                    "opus-4-7",
+		"Opus 4.7 (1M)":                      "Opus 4.7 (1M)", // no "Claude " prefix — unchanged
+		"  Claude Sonnet 4.5  ":              "Sonnet 4.5",
+		"":                                   "",
 	}
-	// Opus 1M should retain the marker.
-	if got := shortenModel("Opus 4.7 (1M)"); got != "opus (1M)" {
-		t.Errorf("want 'opus (1M)', got %q", got)
-	}
-	// Flash 1M is default, elided.
-	if got := shortenModel("Flash 1M"); got != "flash" {
-		t.Errorf("want 'flash', got %q", got)
+	for in, want := range cases {
+		if got := formatModel(in); got != want {
+			t.Errorf("formatModel(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
@@ -103,6 +122,102 @@ func TestParseOriginURL(t *testing.T) {
 	got := parseOriginURL(cfg)
 	if got != "https://github.com/me/repo" {
 		t.Errorf("parseOriginURL = %q", got)
+	}
+}
+
+func TestContextTokens_SumsCurrentUsage(t *testing.T) {
+	in := &statuslineInput{}
+	in.ContextWindow.CurrentUsage.InputTokens = intPtr(1000)
+	in.ContextWindow.CurrentUsage.CacheCreationInputTokens = intPtr(2000)
+	in.ContextWindow.CurrentUsage.CacheReadInputTokens = intPtr(437270)
+	if got := contextTokens(in); got != 1000+2000+437270 {
+		t.Errorf("contextTokens = %d, want %d", got, 1000+2000+437270)
+	}
+}
+
+func TestContextTokens_NilFieldsTreatedAsZero(t *testing.T) {
+	in := &statuslineInput{}
+	// Only cache_read is present — input and cache_creation are nil.
+	in.ContextWindow.CurrentUsage.CacheReadInputTokens = intPtr(500)
+	if got := contextTokens(in); got != 500 {
+		t.Errorf("contextTokens with two nils = %d, want 500", got)
+	}
+}
+
+func TestContextTokens_AllNilReturnsZero(t *testing.T) {
+	in := &statuslineInput{}
+	if got := contextTokens(in); got != 0 {
+		t.Errorf("contextTokens with empty current_usage = %d, want 0", got)
+	}
+}
+
+func TestRenderStatuslineShowsContextTokens(t *testing.T) {
+	in := &statuslineInput{}
+	in.Model.DisplayName = "Claude Sonnet 4.5"
+	in.ContextWindow.UsedPercentage = floatPtr(42)
+	in.ContextWindow.CurrentUsage.InputTokens = intPtr(12000)
+	in.ContextWindow.CurrentUsage.CacheCreationInputTokens = intPtr(8000)
+	in.ContextWindow.CurrentUsage.CacheReadInputTokens = intPtr(417270)
+	// Sum = 437 270 → formats as "437.3k"
+
+	out := renderStatusline(in)
+	lines := strings.Split(out, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines, got:\n%s", out)
+	}
+	if !strings.Contains(lines[1], "437.3k") {
+		t.Errorf("line 2 missing context token count: %q", lines[1])
+	}
+	if !strings.Contains(lines[1], "42%") {
+		t.Errorf("line 2 missing context %%: %q", lines[1])
+	}
+}
+
+func TestRenderStatuslineOmitsContextTokensWhenZero(t *testing.T) {
+	in := &statuslineInput{}
+	in.Model.DisplayName = "Claude Sonnet 4.5"
+	in.ContextWindow.UsedPercentage = floatPtr(0)
+	// current_usage absent — contextTokens = 0
+
+	out := renderStatusline(in)
+	lines := strings.Split(out, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines, got:\n%s", out)
+	}
+	if strings.Contains(lines[1], "(") {
+		t.Errorf("line 2 unexpectedly includes a token-count paren: %q", lines[1])
+	}
+}
+
+func TestFmtTokens(t *testing.T) {
+	cases := map[int64]string{
+		0:              "0",
+		1:              "1",
+		500:            "500",
+		999:            "999",
+		1_000:          "1k",
+		1_234:          "1.2k",
+		12_345:         "12.3k",
+		100_000:        "100k",
+		402_620:        "402.6k",
+		999_999:        "1000k", // just under the M cutoff
+		1_000_000:      "1M",
+		1_500_000:      "1.5M",
+		402_620_000:    "402.6M",
+		999_999_999:    "1000M",
+		1_000_000_000:  "1B",
+		4_250_000_000:  "4.2B", // round-half-to-even: 4.25 → 4.2
+	}
+	for in, want := range cases {
+		if got := fmtTokens(in); got != want {
+			t.Errorf("fmtTokens(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestFmtTokens_NegativeRendersRaw(t *testing.T) {
+	if got := fmtTokens(-42); got != "-42" {
+		t.Errorf("fmtTokens(-42) = %q, want %q", got, "-42")
 	}
 }
 

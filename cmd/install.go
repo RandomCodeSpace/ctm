@@ -90,7 +90,25 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 6. Print summary
+	// 6. Claude-side defaults (idempotent, conservative).
+	//
+	// These mirror ensureSetup()'s claude-side bootstrap so `ctm install`
+	// is a full explicit setup, not just a partial one. Each helper is
+	// strictly no-op when the relevant key is absent or explicitly
+	// "default"; any other user value is respected. See
+	// internal/claude.{EnsureRemoteControlAtStartup,EnsureTUIFullscreen,
+	// EnsureViewModeFocus} for the per-key contracts.
+	if err := ensureClaudeRemoteControlDefault(); err == nil {
+		out.Success("Claude remote control: default on (~/.claude.json)")
+	}
+	if err := ensureClaudeTUIFullscreenDefault(); err == nil {
+		out.Success("Claude TUI: fullscreen (~/.claude/settings.json)")
+	}
+	if err := ensureClaudeViewModeFocusDefault(); err == nil {
+		out.Success("Claude viewMode: focus (~/.claude/settings.json)")
+	}
+
+	// 7. Print summary
 	fmt.Println()
 	out.Bold("ctm installed successfully!")
 	out.Info("Run:  source ~/.bashrc")

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -115,5 +117,155 @@ func TestConfigDir(t *testing.T) {
 	d := Dir()
 	if d == "" {
 		t.Error("Dir() returned empty string")
+	}
+}
+
+func TestDefaultStampsSchemaVersion(t *testing.T) {
+	if got := Default().SchemaVersion; got != SchemaVersion {
+		t.Errorf("Default().SchemaVersion = %d, want %d", got, SchemaVersion)
+	}
+}
+
+func TestLoadCreatesFileWithSchemaVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v := string(raw["schema_version"]); v != "1" {
+		t.Errorf("freshly-created config.json schema_version = %s, want 1", v)
+	}
+}
+
+func TestWriteForceStampsSchemaVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	// Caller deliberately passes a zero SchemaVersion; write must fix it
+	// up so the file always round-trips through the migrator.
+	cfg := Default()
+	cfg.SchemaVersion = 0
+
+	if err := write(path, cfg); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	var raw map[string]json.RawMessage
+	_ = json.Unmarshal(data, &raw)
+	if v := string(raw["schema_version"]); v != "1" {
+		t.Errorf("write stamped schema_version = %s, want 1", v)
+	}
+}
+
+func TestWritePermIs0600(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := write(path, Default()); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0600 {
+		t.Errorf("config.json mode = %v, want 0600", mode)
+	}
+}
+
+func TestMigrationPlan_MatchesSchemaVersion(t *testing.T) {
+	p := MigrationPlan()
+	if p.CurrentVersion != SchemaVersion {
+		t.Errorf("MigrationPlan.CurrentVersion = %d, want %d", p.CurrentVersion, SchemaVersion)
+	}
+	if len(p.Steps) != SchemaVersion {
+		t.Errorf("MigrationPlan has %d steps, want %d (must equal CurrentVersion)", len(p.Steps), SchemaVersion)
+	}
+}
+
+func TestLogPolicy_ZerosResolveToDefaults(t *testing.T) {
+	cfg := Config{} // all zero-valued
+	p := cfg.LogPolicy()
+
+	wantSize := int64(DefaultLogMaxSizeMB) << 20
+	if p.MaxSize != wantSize {
+		t.Errorf("MaxSize = %d, want %d", p.MaxSize, wantSize)
+	}
+	if p.MaxAge != time.Duration(DefaultLogMaxAgeDays)*24*time.Hour {
+		t.Errorf("MaxAge = %v, want %d days", p.MaxAge, DefaultLogMaxAgeDays)
+	}
+	if p.MaxFiles != DefaultLogMaxFiles {
+		t.Errorf("MaxFiles = %d, want %d", p.MaxFiles, DefaultLogMaxFiles)
+	}
+}
+
+func TestLogPolicy_ExplicitValuesRespected(t *testing.T) {
+	cfg := Config{LogMaxSizeMB: 200, LogMaxAgeDays: 7, LogMaxFiles: 3}
+	p := cfg.LogPolicy()
+
+	if p.MaxSize != 200<<20 {
+		t.Errorf("MaxSize = %d, want %d", p.MaxSize, 200<<20)
+	}
+	if p.MaxAge != 7*24*time.Hour {
+		t.Errorf("MaxAge = %v, want 7d", p.MaxAge)
+	}
+	if p.MaxFiles != 3 {
+		t.Errorf("MaxFiles = %d, want 3", p.MaxFiles)
+	}
+}
+
+func TestLoad_StripsUnknownKeysAndBacksUp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	// A config with every real field PLUS a made-up one ("typo").
+	original := `{
+  "schema_version": 1,
+  "scrollback_lines": 12345,
+  "default_mode": "yolo",
+  "typo": "this is not a real key"
+}`
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load expected to succeed after strip: %v", err)
+	}
+	if cfg.ScrollbackLines != 12345 || cfg.DefaultMode != "yolo" {
+		t.Errorf("typed fields dropped: %+v", cfg)
+	}
+
+	// Confirm an unknowns-backup sibling exists with the original bytes.
+	entries, _ := os.ReadDir(dir)
+	var backup string
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".bak.unknowns.") {
+			backup = filepath.Join(dir, e.Name())
+			break
+		}
+	}
+	if backup == "" {
+		t.Fatal("expected a .bak.unknowns.* backup, found none")
+	}
+	bdata, _ := os.ReadFile(backup)
+	if string(bdata) != original {
+		t.Errorf("backup diverges from original")
+	}
+
+	// Rewritten file must no longer contain the stripped key.
+	after, _ := os.ReadFile(path)
+	if strings.Contains(string(after), `"typo"`) {
+		t.Errorf("stripped key survived rewrite: %s", after)
 	}
 }

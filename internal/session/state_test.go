@@ -1,6 +1,7 @@
 package session_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -268,5 +269,52 @@ func TestSanitizeName(t *testing.T) {
 				t.Errorf("SanitizeName(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSaveStampsSchemaVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sessions.json")
+	st := session.NewStore(path)
+
+	if err := st.Save(session.New("alpha", "/work", "safe")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v := string(raw["schema_version"]); v != "1" {
+		t.Errorf("sessions.json schema_version = %s, want 1", v)
+	}
+}
+
+func TestMigrationPlan_MatchesSchemaVersion(t *testing.T) {
+	p := session.MigrationPlan()
+	if p.CurrentVersion != session.SchemaVersion {
+		t.Errorf("MigrationPlan.CurrentVersion = %d, want %d", p.CurrentVersion, session.SchemaVersion)
+	}
+	if len(p.Steps) != session.SchemaVersion {
+		t.Errorf("MigrationPlan has %d steps, want %d", len(p.Steps), session.SchemaVersion)
+	}
+}
+
+func TestSavePermIs0600(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sessions.json")
+	st := session.NewStore(path)
+	if err := st.Save(session.New("alpha", "/work", "safe")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0600 {
+		t.Errorf("sessions.json mode = %v, want 0600", mode)
 	}
 }

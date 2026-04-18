@@ -220,3 +220,168 @@ func TestEnsureTUIFullscreen_IdempotentFromDefault(t *testing.T) {
 		t.Errorf("second run modified file:\nfirst:  %s\nsecond: %s", first, second)
 	}
 }
+
+func TestEnsureViewModeFocus(t *testing.T) {
+	tests := []struct {
+		name       string
+		initial    string // "" = file does not exist
+		wantExists bool
+		wantKey    string // "" = key must be absent in result
+	}{
+		{
+			name:       "missing file = no-op (do not create)",
+			initial:    "",
+			wantExists: false,
+			wantKey:    "",
+		},
+		{
+			name:       "key absent = added as focus",
+			initial:    `{"theme":"dark"}`,
+			wantExists: true,
+			wantKey:    `"focus"`,
+		},
+		{
+			name:       "key default = upgraded to focus",
+			initial:    `{"viewMode":"default","theme":"dark"}`,
+			wantExists: true,
+			wantKey:    `"focus"`,
+		},
+		{
+			name:       "key focus = left alone (already target)",
+			initial:    `{"viewMode":"focus","theme":"dark"}`,
+			wantExists: true,
+			wantKey:    `"focus"`,
+		},
+		{
+			name:       "key verbose = respected (user chose verbose)",
+			initial:    `{"viewMode":"verbose","theme":"dark"}`,
+			wantExists: true,
+			wantKey:    `"verbose"`,
+		},
+		{
+			name:       "custom mode = respected",
+			initial:    `{"viewMode":"custom","theme":"dark"}`,
+			wantExists: true,
+			wantKey:    `"custom"`,
+		},
+		{
+			name:       "empty JSON object = key added",
+			initial:    `{}`,
+			wantExists: true,
+			wantKey:    `"focus"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "settings.json")
+
+			if tt.initial != "" {
+				if err := os.WriteFile(path, []byte(tt.initial), 0644); err != nil {
+					t.Fatalf("setup: %v", err)
+				}
+			}
+
+			if err := EnsureViewModeFocus(path); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			_, err := os.Stat(path)
+			exists := err == nil
+			if exists != tt.wantExists {
+				t.Fatalf("file exists = %v, want %v", exists, tt.wantExists)
+			}
+			if !exists {
+				return
+			}
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("reading result: %v", err)
+			}
+			var obj map[string]json.RawMessage
+			if err := json.Unmarshal(data, &obj); err != nil {
+				t.Fatalf("parsing result: %v", err)
+			}
+
+			got, present := obj["viewMode"]
+			switch {
+			case tt.wantKey == "" && present:
+				t.Errorf("key unexpectedly present = %s", string(got))
+			case tt.wantKey != "" && !present:
+				t.Errorf("key missing, want %s", tt.wantKey)
+			case tt.wantKey != "" && string(got) != tt.wantKey:
+				t.Errorf("value = %s, want %s", string(got), tt.wantKey)
+			}
+
+			if raw, ok := obj["theme"]; ok {
+				if string(raw) != `"dark"` {
+					t.Errorf("sibling key theme = %s, want \"dark\"", string(raw))
+				}
+			}
+		})
+	}
+}
+
+func TestEnsureViewModeFocus_InvalidJSONReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{not json`), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	if err := EnsureViewModeFocus(path); err == nil {
+		t.Fatal("expected error on invalid JSON, got nil")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading after error: %v", err)
+	}
+	if string(data) != `{not json` {
+		t.Errorf("original file modified on parse error: %q", string(data))
+	}
+}
+
+func TestEnsureViewModeFocus_PreservesFileMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"theme":"dark"}`), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	if err := EnsureViewModeFocus(path); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0644 {
+		t.Errorf("mode = %v, want 0644", mode)
+	}
+}
+
+func TestEnsureViewModeFocus_IdempotentFromDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"viewMode":"default","theme":"dark"}`), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	if err := EnsureViewModeFocus(path); err != nil {
+		t.Fatalf("run 1: %v", err)
+	}
+	first, _ := os.ReadFile(path)
+
+	if err := EnsureViewModeFocus(path); err != nil {
+		t.Fatalf("run 2: %v", err)
+	}
+	second, _ := os.ReadFile(path)
+
+	if string(first) != string(second) {
+		t.Errorf("second run modified file:\nfirst:  %s\nsecond: %s", first, second)
+	}
+}

@@ -5,27 +5,126 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/RandomCodeSpace/ctm/internal/config"
+	"github.com/RandomCodeSpace/ctm/internal/logrotate"
 	"github.com/RandomCodeSpace/ctm/internal/output"
 )
 
 func init() {
 	logsCmd.Flags().BoolVarP(&logsFollow, "follow", "f", false, "Tail the log (follow new entries)")
 	logsCmd.Flags().BoolVar(&logsRaw, "raw", false, "Print raw JSONL lines without formatting")
+	logsCmd.Flags().StringVar(&logsSince, "since", "", "Only show entries newer than this duration (e.g. 7d, 24h, 30m). Days accepted via \"Nd\" suffix.")
+	logsCmd.Flags().StringVar(&logsTool, "tool", "", "Only show entries whose tool_name matches (case-insensitive, exact).")
+	logsCmd.Flags().StringVar(&logsGrep, "grep", "", "Only show entries whose raw JSON line matches this regex.")
 	rootCmd.AddCommand(logsCmd)
 }
 
 var (
 	logsFollow bool
 	logsRaw    bool
+	logsSince  string
+	logsTool   string
+	logsGrep   string
 )
+
+// filterSpec is the compiled form of the logs-command filter flags.
+// Zero-valued fields disable the corresponding check, so an empty
+// filterSpec passes everything.
+type filterSpec struct {
+	since    time.Time      // zero = no time filter
+	toolLow  string         // "" = no tool filter (lowercased)
+	grep     *regexp.Regexp // nil = no grep filter
+	active   bool           // true if any filter is set (cheap short-circuit)
+}
+
+// compileFilters builds a filterSpec from the current flag values.
+// Returns an error if any flag is malformed.
+func compileFilters() (filterSpec, error) {
+	var fs filterSpec
+	if logsSince != "" {
+		d, err := parseSince(logsSince)
+		if err != nil {
+			return fs, fmt.Errorf("--since: %w", err)
+		}
+		fs.since = time.Now().Add(-d)
+		fs.active = true
+	}
+	if logsTool != "" {
+		fs.toolLow = strings.ToLower(logsTool)
+		fs.active = true
+	}
+	if logsGrep != "" {
+		re, err := regexp.Compile(logsGrep)
+		if err != nil {
+			return fs, fmt.Errorf("--grep: %w", err)
+		}
+		fs.grep = re
+		fs.active = true
+	}
+	return fs, nil
+}
+
+// parseSince accepts Go's time.ParseDuration format plus a "Nd" day
+// shorthand ("7d" → 7*24h). Empty string is an error; use an empty
+// --since flag value to disable the filter instead.
+func parseSince(s string) (time.Duration, error) {
+	if strings.HasSuffix(s, "d") {
+		days, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+		if err != nil {
+			return 0, fmt.Errorf("invalid day count %q", s)
+		}
+		if days < 0 {
+			return 0, fmt.Errorf("--since must be non-negative, got %q", s)
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(s)
+}
+
+// match returns true if the given raw JSONL line passes every active
+// filter in fs. Malformed lines (non-JSON) pass iff --grep matches
+// literal bytes and no other filter is active — otherwise they fail
+// (we cannot introspect tool_name / ctm_timestamp without a parse).
+func (fs filterSpec) match(raw []byte) bool {
+	if !fs.active {
+		return true
+	}
+	if fs.grep != nil && !fs.grep.Match(raw) {
+		return false
+	}
+	// Short-circuit: if only --grep is set, we're done.
+	if fs.since.IsZero() && fs.toolLow == "" {
+		return true
+	}
+	var entry map[string]any
+	if err := json.Unmarshal(raw, &entry); err != nil {
+		return false
+	}
+	if !fs.since.IsZero() {
+		ts, _ := entry["ctm_timestamp"].(string)
+		parsed, err := time.Parse(time.RFC3339, ts)
+		if err != nil || parsed.Before(fs.since) {
+			return false
+		}
+	}
+	if fs.toolLow != "" {
+		name, _ := entry["tool_name"].(string)
+		if strings.ToLower(name) != fs.toolLow {
+			return false
+		}
+	}
+	return true
+}
 
 var logsCmd = &cobra.Command{
 	Use:   "logs [session-id]",
@@ -40,9 +139,15 @@ var logsCmd = &cobra.Command{
 func runLogs(cmd *cobra.Command, args []string) error {
 	logDir := filepath.Join(config.Dir(), "logs")
 
-	// No arg → list available session logs.
+	// No arg → list available session logs. The filter flags apply
+	// only to the dump/tail path; listing is unaffected by them.
 	if len(args) == 0 {
 		return listSessionLogs(logDir)
+	}
+
+	fs, err := compileFilters()
+	if err != nil {
+		return err
 	}
 
 	// With arg → show that session's log (tailing if requested).
@@ -53,9 +158,9 @@ func runLogs(cmd *cobra.Command, args []string) error {
 	}
 
 	if logsFollow {
-		return tailLog(cmd, logFile)
+		return tailLog(cmd, logFile, fs)
 	}
-	return dumpLog(logFile)
+	return dumpLog(logFile, fs)
 }
 
 // listSessionLogs prints a table of session-id → entry count.
@@ -113,16 +218,31 @@ func listSessionLogs(logDir string) error {
 	return nil
 }
 
-// countLines returns the number of newline-terminated records in a file.
-// Returns 0 on any error — this is a display helper, not critical.
+// countLines returns the number of newline-terminated records across
+// the active log and every rotated .gz sibling. Returns 0 on any error
+// — this is a display helper, not critical.
 func countLines(path string) int {
-	f, err := os.Open(path)
+	sources, err := logrotate.Sources(path)
 	if err != nil {
 		return 0
 	}
-	defer f.Close()
+	var total int
+	for _, src := range sources {
+		total += countLinesOne(src)
+	}
+	return total
+}
+
+// countLinesOne counts newline-terminated records in a single source
+// (plain or .gz), returning 0 on any error.
+func countLinesOne(path string) int {
+	r, err := logrotate.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer r.Close()
 	var count int
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		count++
@@ -137,19 +257,48 @@ func truncate(s string, n int) string {
 	return s[:n-1] + "…"
 }
 
-// dumpLog reads all JSONL lines from path and prints them formatted (or raw
-// if --raw was passed).
-func dumpLog(path string) error {
-	f, err := os.Open(path)
+// dumpLog reads every JSONL line for a session — across rotated .gz
+// siblings and the active log, in chronological order — applies the
+// filter spec (if any), and prints each passing line formatted (or
+// raw if --raw was passed).
+//
+// Per-source errors (e.g. a corrupt .gz, an I/O error mid-read) are
+// logged at WARN level and skipped rather than aborting the rest of
+// the session's history. A truncated final line in any source is
+// handled naturally by bufio.Scanner, which emits the partial bytes
+// as a final token.
+func dumpLog(path string, fs filterSpec) error {
+	sources, err := logrotate.Sources(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	for _, src := range sources {
+		if err := dumpOne(src, fs); err != nil {
+			slog.Warn("skipping unreadable log source",
+				"path", src, "err", err)
+			continue
+		}
+	}
+	return nil
+}
 
-	scanner := bufio.NewScanner(f)
+// dumpOne reads a single source (plain or .gz) line by line, drops
+// anything the filter rejects, and prints each survivor via
+// printFormattedEntry (or raw passthrough when --raw).
+func dumpOne(path string, fs filterSpec) error {
+	r, err := logrotate.Open(path)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Bytes()
+		if !fs.match(line) {
+			continue
+		}
 		if logsRaw {
 			fmt.Println(string(line))
 			continue
@@ -159,11 +308,24 @@ func dumpLog(path string) error {
 	return scanner.Err()
 }
 
-// tailLog prints existing entries then follows new ones. Polls the file
-// every 500ms. Handles truncation and rotation by reopening when the file
-// shrinks below our read offset or disappears entirely. Exits cleanly on
-// Ctrl-C via the command context.
-func tailLog(cmd *cobra.Command, path string) error {
+// tailLog prints existing entries then follows new ones. First it
+// drains every rotated .gz sibling in chronological order, then drains
+// the active log, then polls every 500ms for new entries. Each line
+// is filtered against fs before being printed. Handles truncation and
+// mid-tail rotation by reopening when the active file shrinks below
+// our read offset or disappears entirely. Exits cleanly on Ctrl-C via
+// the command context.
+func tailLog(cmd *cobra.Command, path string, fs filterSpec) error {
+	// Drain rotated siblings first — they're immutable and won't grow.
+	if sources, err := logrotate.Sources(path); err == nil {
+		for _, src := range sources {
+			if src == path {
+				continue
+			}
+			_ = dumpOne(src, fs)
+		}
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -178,10 +340,12 @@ func tailLog(cmd *cobra.Command, path string) error {
 			if len(line) > 0 {
 				offset += int64(len(line))
 				trimmed := strings.TrimRight(string(line), "\n")
-				if logsRaw {
-					fmt.Println(trimmed)
-				} else {
-					printFormattedEntry([]byte(trimmed))
+				if fs.match([]byte(trimmed)) {
+					if logsRaw {
+						fmt.Println(trimmed)
+					} else {
+						printFormattedEntry([]byte(trimmed))
+					}
 				}
 			}
 			if err == io.EOF {

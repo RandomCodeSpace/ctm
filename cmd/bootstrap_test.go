@@ -126,6 +126,25 @@ func TestEnsureOverlayCreatesWithHookCommands(t *testing.T) {
 	}
 }
 
+func TestOverlayAndEnvFilePermsAre0600(t *testing.T) {
+	withTempHome(t)
+	if err := ensureOverlaySidecars(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		config.ClaudeOverlayPath(),
+		config.EnvFilePath(),
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if mode := info.Mode().Perm(); mode != 0600 {
+			t.Errorf("%s mode = %v, want 0600", path, mode)
+		}
+	}
+}
+
 func contains(haystack, needle string) bool {
 	return len(haystack) >= len(needle) && indexOf(haystack, needle) >= 0
 }

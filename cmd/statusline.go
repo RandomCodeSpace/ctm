@@ -23,11 +23,17 @@ func init() {
 // we print a three-line display on stdout. Hidden because it's an
 // internal hook, not a user-facing command.
 //
-// Output layout matches the former bash helper, minus jq/awk/grep:
+// Output layout (3 lines):
 //
-//	Line 1: <model> · <project>    (project is OSC 8 hyperlink if git repo)
-//	Line 2: c ━━──  w ━───  h ━━━─  (remaining context / weekly / 5-hour)
-//	Line 3: ↑ in · ↓ out · ⚡ cache  (session tokens + cache reads)
+//	Line 1: <model> · <project>           (project is OSC 8 hyperlink if git repo)
+//	Line 2: c 25% (437k)  w 40%  h 10%    (context % + tokens + rate limits)
+//	Line 3: ↑ 117k  ↓ 434k                (cumulative session input / output)
+//
+// Cache_read (⚡) was dropped from the status because its magnitude is
+// already captured in the context-tokens parenthesis and Claude Code's
+// own focus-mode overlay duplicates the information. Weekly / 5-hour
+// rate limits share line 2 with context because they're all
+// percentages; tokens share line 3 because both are cumulative ints.
 var statuslineCmd = &cobra.Command{
 	Use:           "statusline",
 	Short:         "Internal statusLine renderer — reads JSON on stdin (hidden)",
@@ -54,7 +60,9 @@ type statuslineInput struct {
 		TotalInputTokens  *int64   `json:"total_input_tokens"`
 		TotalOutputTokens *int64   `json:"total_output_tokens"`
 		CurrentUsage      struct {
-			CacheReadInputTokens *int64 `json:"cache_read_input_tokens"`
+			InputTokens              *int64 `json:"input_tokens"`
+			CacheCreationInputTokens *int64 `json:"cache_creation_input_tokens"`
+			CacheReadInputTokens     *int64 `json:"cache_read_input_tokens"`
 		} `json:"current_usage"`
 	} `json:"context_window"`
 	RateLimits struct {
@@ -72,6 +80,15 @@ func runStatusline(cmd *cobra.Command, args []string) error {
 	if err != nil || len(data) == 0 {
 		return nil
 	}
+
+	// Diagnostic: if CTM_STATUSLINE_DUMP points at a file path, write
+	// the raw payload there before parsing. Useful for debugging a
+	// render that doesn't match expectations — the user can grab the
+	// exact bytes Claude Code sent and share them.
+	if dump := os.Getenv("CTM_STATUSLINE_DUMP"); dump != "" {
+		_ = os.WriteFile(dump, data, 0600)
+	}
+
 	var in statuslineInput
 	if err := json.Unmarshal(data, &in); err != nil {
 		return nil
@@ -79,6 +96,13 @@ func runStatusline(cmd *cobra.Command, args []string) error {
 	rendered := renderStatusline(&in)
 	if rendered != "" {
 		fmt.Println(rendered)
+	}
+	// Diagnostic twin of CTM_STATUSLINE_DUMP: if CTM_STATUSLINE_OUT
+	// points at a path, write the rendered bytes there. Lets a caller
+	// cross-reference input-payload dump against the exact output
+	// string ctm produced on the same redraw.
+	if out := os.Getenv("CTM_STATUSLINE_OUT"); out != "" {
+		_ = os.WriteFile(out, []byte(rendered), 0600)
 	}
 	return nil
 }
@@ -91,28 +115,39 @@ const (
 	cYellow   = "\x1b[1;38;5;208m" // 5-hour bar
 	cHdrModel = "\x1b[1;97m"
 	cHdrSep   = "\x1b[90m"
-	cTokIn    = "\x1b[1;38;5;33m"
-	cTokOut   = "\x1b[1;38;5;37m"
-	cTokCache = "\x1b[1;38;5;220m"
-	cDimGray  = "\x1b[90m"
+	cTokIn   = "\x1b[1;38;5;33m"
+	cTokOut  = "\x1b[1;38;5;37m"
+	cDimGray = "\x1b[90m"
 )
 
 func renderStatusline(in *statuslineInput) string {
-	line1 := buildHeader(in)
-	barLine := buildBars(in)
-	tokLine := buildTokens(in)
-
 	var lines []string
-	if line1 != "" {
-		lines = append(lines, line1)
+	if s := buildHeader(in); s != "" {
+		lines = append(lines, s)
 	}
-	if barLine != "" {
-		lines = append(lines, barLine)
+	// Line 2: context + rate-limit percentages on one line.
+	mid := joinNonEmpty(buildContextLine(in), buildRateLimitLine(in))
+	if mid != "" {
+		lines = append(lines, mid)
 	}
-	if tokLine != "" {
-		lines = append(lines, tokLine)
+	if s := buildTokenLine(in); s != "" {
+		lines = append(lines, s)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// joinNonEmpty joins its arguments with "  " between each pair, skipping
+// empty strings. Used to glue together optional statusline segments
+// without leaving trailing or leading whitespace when a section was
+// skipped for a missing payload field.
+func joinNonEmpty(parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, "  ")
 }
 
 func buildHeader(in *statuslineInput) string {
@@ -127,7 +162,7 @@ func buildHeader(in *statuslineInput) string {
 
 	var parts []string
 	if model != "" {
-		parts = append(parts, shortenModel(model))
+		parts = append(parts, formatModel(model))
 	}
 	if project != "" {
 		parts = append(parts, shortenPath(project))
@@ -148,105 +183,116 @@ func buildHeader(in *statuslineInput) string {
 	}
 }
 
-func buildBars(in *statuslineInput) string {
-	var parts []string
-	add := func(label rune, color string, used *float64) {
-		if used == nil {
-			return
-		}
-		pct := int(math.Round(100 - *used))
-		parts = append(parts, fmt.Sprintf("%s%c%s %s", color, label, cReset, makeBar(pct, color)))
+// buildContextLine builds the `c <pct>% (<tokens>)` segment of line 2.
+// The context-window-used percentage is the primary signal; the
+// parenthesised token sum (input + cache_creation + cache_read, per
+// Claude Code's input-only formula) is a secondary concrete number.
+// Returns "" when used_percentage is absent.
+func buildContextLine(in *statuslineInput) string {
+	used := in.ContextWindow.UsedPercentage
+	if used == nil {
+		return ""
 	}
-	add('c', cCyan, in.ContextWindow.UsedPercentage)
-	add('w', cMagenta, in.RateLimits.SevenDay.UsedPercentage)
-	add('h', cYellow, in.RateLimits.FiveHour.UsedPercentage)
-	return strings.Join(parts, "  ")
+	usedPct := int(math.Round(*used))
+	entry := fmt.Sprintf("%sc %d%%%s", cCyan, usedPct, cReset)
+	if ctx := contextTokens(in); ctx > 0 {
+		entry += fmt.Sprintf(" %s(%s)%s", cDimGray, fmtTokens(ctx), cReset)
+	}
+	return entry
 }
 
-func buildTokens(in *statuslineInput) string {
+// buildTokenLine renders the cumulative session token totals: `↑ <input>`
+// and `↓ <output>`. cache_read (⚡) used to live here too; it was dropped
+// from the statusline — the token magnitude is already visible as the
+// parenthesised number on the context line and Claude Code's focus-mode
+// overlay renders its own cache indicator.
+func buildTokenLine(in *statuslineInput) string {
 	var parts []string
 	add := func(glyph rune, color string, n *int64) {
 		if n == nil || *n <= 0 {
 			return
 		}
-		parts = append(parts, fmt.Sprintf("%s%c%s %s%s%s", color, glyph, cReset, cDimGray, fmtTokens(*n), cReset))
+		parts = append(parts, fmt.Sprintf("%s%c%s %s%s%s",
+			color, glyph, cReset, cDimGray, fmtTokens(*n), cReset))
 	}
 	add('↑', cTokIn, in.ContextWindow.TotalInputTokens)
 	add('↓', cTokOut, in.ContextWindow.TotalOutputTokens)
-	add('⚡', cTokCache, in.ContextWindow.CurrentUsage.CacheReadInputTokens)
 	return strings.Join(parts, "  ")
 }
 
-// shortenModel mimics the bash helper: pick one of sonnet/opus/haiku/flash
-// from the model name when possible, and append a "(1M)" / "(200K)" context
-// marker except for the default marker per family.
-func shortenModel(name string) string {
-	lower := strings.ToLower(name)
-	short := ""
-	for _, kw := range []string{"sonnet", "opus", "haiku", "flash"} {
-		if strings.Contains(lower, kw) {
-			short = kw
-			break
+// buildRateLimitLine renders `w <pct>%` and `h <pct>%` for weekly and
+// 5-hour rate-limit usage. Percentages only — Claude Code's payload
+// does not expose token counts for these buckets. Rendered on the
+// same physical line as the context percentage (joined by renderStatusline).
+func buildRateLimitLine(in *statuslineInput) string {
+	var parts []string
+	add := func(label rune, color string, used *float64) {
+		if used == nil {
+			return
 		}
+		usedPct := int(math.Round(*used))
+		parts = append(parts, fmt.Sprintf("%s%c %d%%%s",
+			color, label, usedPct, cReset))
 	}
-	if short == "" {
-		short = strings.TrimSpace(strings.ToLower(stripParens(name)))
-	}
-
-	marker := extractContextMarker(name)
-	if marker == "" {
-		return short
-	}
-	ml := strings.ToLower(marker)
-	skip := false
-	switch short {
-	case "sonnet", "opus", "haiku":
-		skip = ml == "200k"
-	case "flash":
-		skip = ml == "1m"
-	}
-	if skip {
-		return short
-	}
-	return short + " (" + strings.ToUpper(marker) + ")"
+	add('w', cMagenta, in.RateLimits.SevenDay.UsedPercentage)
+	add('h', cYellow, in.RateLimits.FiveHour.UsedPercentage)
+	return strings.Join(parts, "  ")
 }
 
-// stripParens removes any "(...)" groups from the string.
-func stripParens(s string) string {
-	for {
-		lp := strings.Index(s, "(")
-		if lp < 0 {
-			return s
-		}
-		rp := strings.Index(s[lp:], ")")
-		if rp < 0 {
-			return s
-		}
-		s = s[:lp] + s[lp+rp+1:]
+// contextTokens returns the number of tokens currently consumed in the
+// context window, computed per Claude Code's documented formula:
+//
+//	input_tokens + cache_creation_input_tokens + cache_read_input_tokens
+//
+// (current_usage only, input-side only — this is the same definition
+// used to derive context_window.used_percentage; output tokens do not
+// count toward context). Any missing field is treated as 0; the sum is
+// capped at zero so the caller can branch on >0 to decide whether to
+// render.
+func contextTokens(in *statuslineInput) int64 {
+	cu := in.ContextWindow.CurrentUsage
+	var total int64
+	if cu.InputTokens != nil {
+		total += *cu.InputTokens
 	}
+	if cu.CacheCreationInputTokens != nil {
+		total += *cu.CacheCreationInputTokens
+	}
+	if cu.CacheReadInputTokens != nil {
+		total += *cu.CacheReadInputTokens
+	}
+	if total < 0 {
+		return 0
+	}
+	return total
 }
 
-// extractContextMarker finds the first "<digits>[Mk]" run (case-insensitive).
-func extractContextMarker(s string) string {
-	i := 0
-	for i < len(s) {
-		if s[i] >= '0' && s[i] <= '9' {
-			j := i
-			for j < len(s) && s[j] >= '0' && s[j] <= '9' {
-				j++
-			}
-			if j < len(s) {
-				c := s[j]
-				if c == 'M' || c == 'm' || c == 'K' || c == 'k' {
-					return s[i : j+1]
-				}
-			}
-			i = j
-			continue
-		}
-		i++
+// formatModel returns the model's display name with redundant words
+// stripped. Two simplifications happen:
+//
+//  1. The "Claude " / "claude-" prefix is dropped (every model in this
+//     statusline is a Claude model — the word carries no signal).
+//  2. The trailing " context" inside a "(… context)" marker is
+//     collapsed so "(1M context)" / "(200K context)" render as "(1M)"
+//     / "(200K)". The marker number alone is understood; the word
+//     just eats width.
+//
+// Examples:
+//
+//	"Claude Opus 4.7 (1M context)"   → "Opus 4.7 (1M)"
+//	"Claude Sonnet 4.5 (200K)"        → "Sonnet 4.5 (200K)"
+//	"Claude Opus 4.7"                 → "Opus 4.7"
+//	"claude-sonnet-4-5-20250929"      → "sonnet-4-5-20250929"
+//	""                                → ""
+func formatModel(name string) string {
+	s := strings.TrimSpace(name)
+	if trimmed, ok := strings.CutPrefix(s, "Claude "); ok {
+		s = trimmed
+	} else if trimmed, ok := strings.CutPrefix(s, "claude-"); ok {
+		s = trimmed
 	}
-	return ""
+	s = strings.Replace(s, " context)", ")", 1)
+	return s
 }
 
 // shortenPath rewrites $HOME prefix as "~".
@@ -328,24 +374,38 @@ func normalizeRemoteURL(raw string) string {
 	return ""
 }
 
-// makeBar produces a 4-cell bar: `━` for filled, `─` for empty, colored.
-func makeBar(pct int, color string) string {
-	const width = 4
-	filled := pct * width / 100
-	if filled > width {
-		filled = width
+// fmtTokens formats n with an SI-style suffix so the statusline width
+// stays bounded regardless of how chatty a session gets. Rules:
+//
+//   - n <  1 000               → "<n>"        e.g. "500"
+//   - n <  1 000 000           → "<n/1k>k"    e.g. "1.2k", "402.6k", "1k"
+//   - n <  1 000 000 000       → "<n/1M>M"    e.g. "1.5M", "402.6M", "1M"
+//   - n ≥ 1 000 000 000        → "<n/1B>B"    e.g. "4.2B"
+//
+// Negative values (shouldn't happen for token counts but are defended
+// against to keep the hook crash-free) are formatted as the raw int.
+// Trailing ".0" is stripped so thousands that land on a round number
+// render tight ("402k" rather than "402.0k").
+func fmtTokens(n int64) string {
+	if n < 0 {
+		return strconv.FormatInt(n, 10)
 	}
-	if filled < 0 {
-		filled = 0
+	switch {
+	case n < 1_000:
+		return strconv.FormatInt(n, 10)
+	case n < 1_000_000:
+		return humanSI(float64(n)/1_000.0, "k")
+	case n < 1_000_000_000:
+		return humanSI(float64(n)/1_000_000.0, "M")
+	default:
+		return humanSI(float64(n)/1_000_000_000.0, "B")
 	}
-	empty := width - filled
-	return color + strings.Repeat("━", filled) + cReset + strings.Repeat("─", empty)
 }
 
-// fmtTokens formats n as "X.Yk" for n>=1000, else the raw integer.
-func fmtTokens(n int64) string {
-	if n >= 1000 {
-		return strconv.FormatFloat(float64(n)/1000.0, 'f', 1, 64) + "k"
-	}
-	return strconv.FormatInt(n, 10)
+// humanSI formats v with one decimal then strips a trailing ".0" so
+// round-ish numbers look clean ("5k" not "5.0k", "1.5k" unchanged).
+func humanSI(v float64, suffix string) string {
+	s := strconv.FormatFloat(v, 'f', 1, 64)
+	s = strings.TrimSuffix(s, ".0")
+	return s + suffix
 }

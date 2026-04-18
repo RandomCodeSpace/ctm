@@ -37,9 +37,14 @@ func runKill(cmd *cobra.Command, args []string) error {
 	store := session.NewStore(config.SessionsPath())
 	tc := tmux.NewClient(config.TmuxConfPath())
 
-	if _, err := store.Get(name); err != nil {
+	sess, err := store.Get(name)
+	if err != nil {
 		return fmt.Errorf("session %q not found", name)
 	}
+
+	// Fire the hook BEFORE tearing down so the script can see the
+	// session as still live (take a transcript snapshot, notify, …).
+	fireHook("on_kill", sess)
 
 	if tc.HasSession(name) {
 		if err := tc.KillSession(name); err != nil {
@@ -68,6 +73,11 @@ func runKillAll(cmd *cobra.Command, args []string) error {
 	if len(sessions) == 0 {
 		out.Dim("No sessions to kill")
 		return nil
+	}
+
+	// Fire on_kill for each session while they still exist on disk.
+	for _, s := range sessions {
+		fireHook("on_kill", s)
 	}
 
 	if err := tc.KillServer(); err != nil {

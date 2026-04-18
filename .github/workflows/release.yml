@@ -36,7 +36,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          # Pin to the major+minor declared in go.mod so `go mod vendor`
+          # and the release build succeed against the source tree.
+          go-version-file: go.mod
 
       - name: Run tests
         run: go test ./...
@@ -114,6 +116,57 @@ jobs:
           git tag -a "$VERSION" -m "Release $VERSION"
           git push origin "$VERSION"
 
+      - name: Build release artifacts (vendored source tarball + checksums)
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          # Vendor deps so the tarball builds offline (rules/build.md:
+          # air-gapped deploys require vendored dependencies).
+          go mod vendor
+
+          # Deterministic tarball of the source tree at this tag, with
+          # a top-level ctm-<VERSION>/ prefix for friendly extraction.
+          # Exclude transient artefacts (.git, dist, node_modules, etc.)
+          # while keeping vendor/ and hidden dotfiles that are part of
+          # the release (.github, .gitignore).
+          tar \
+            --transform "s,^\\.,ctm-${VERSION}," \
+            --exclude='./.git' \
+            --exclude='./dist' \
+            --exclude='*.DS_Store' \
+            -czf "dist/ctm-${VERSION}-src.tar.gz" \
+            .
+
+          # SHA256SUMS over every artifact in dist/. Format is the GNU
+          # coreutils standard (`sha256sum -c SHA256SUMS` verifies).
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+          echo "Artifacts:"
+          ls -lh dist
+          echo "Checksums:"
+          cat dist/SHA256SUMS
+
+      - name: Append checksums to release notes
+        run: |
+          {
+            echo
+            echo "## Verification"
+            echo
+            echo 'Tarball SHA256 sums (also attached as `SHA256SUMS`):'
+            echo
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+            echo
+            echo 'Verify:'
+            echo
+            echo '```bash'
+            echo 'sha256sum -c SHA256SUMS  # inside the dir where both files live'
+            echo '```'
+          } >> release-notes.md
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -121,4 +174,6 @@ jobs:
         run: |
           gh release create "$VERSION" \
             --title "$VERSION" \
-            --notes-file release-notes.md
+            --notes-file release-notes.md \
+            "dist/ctm-${VERSION}-src.tar.gz" \
+            dist/SHA256SUMS

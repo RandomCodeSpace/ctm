@@ -116,6 +116,7 @@ func runYolo(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Magenta(">>> YOLO MODE")
+	fireHook("on_yolo", yoloIntent(store, name, workdir, "yolo"))
 
 	// If session exists and mode matches → preflight. preflight handles both
 	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
@@ -172,6 +173,7 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Magenta(">>> YOLO MODE")
+	fireHook("on_yolo", yoloIntent(store, name, workdir, "yolo"))
 
 	if tc.HasSession(name) {
 		if err := tc.KillSession(name); err != nil {
@@ -212,6 +214,7 @@ func runSafe(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Success(">>> SAFE MODE")
+	fireHook("on_safe", yoloIntent(store, name, workdir, "safe"))
 
 	// If session exists and mode matches → preflight. preflight handles both
 	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),

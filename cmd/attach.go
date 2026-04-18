@@ -89,6 +89,7 @@ func createAndAttach(name, workdir, mode string, store *session.Store, tc *tmux.
 	}
 
 	out.Success("created session %q", name)
+	fireHook("on_new", sess)
 	return tc.Go(name)
 }
 
@@ -141,6 +142,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 		if err := store.UpdateAttached(sess.Name); err != nil {
 			out.Warn("could not update attached timestamp: %v", err)
 		}
+		fireHook("on_attach", sess)
 		if err := tc.Go(sess.Name); err != nil {
 			return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
 		}
@@ -163,6 +165,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 		if err := store.UpdateAttached(sess.Name); err != nil {
 			out.Warn("could not update attached timestamp: %v", err)
 		}
+		fireHook("on_attach", sess)
 		if err := tc.Go(sess.Name); err != nil {
 			return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
 		}
@@ -178,6 +181,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 		out.Warn("could not update attached timestamp: %v", err)
 	}
 
+	fireHook("on_attach", sess)
 	if err := tc.Go(sess.Name); err != nil {
 		return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
 	}

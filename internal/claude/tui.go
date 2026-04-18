@@ -47,3 +47,34 @@ func EnsureTUIFullscreen(path string) error {
 		return true
 	})
 }
+
+// EnsureViewModeFocus pins "viewMode": "focus" in Claude Code's
+// settings.json when the key is absent OR explicitly set to "default".
+// Any other value ("verbose", or a future mode) is treated as an
+// intentional user choice and left alone.
+//
+// Context: `viewMode` is the documented startup default for the transcript
+// view (default | verbose | focus). Setting it to "focus" yields the
+// streamlined "last prompt + tool-call summaries + final response" layout
+// that is otherwise toggled at runtime via `/focus`. This pairs with
+// EnsureTUIFullscreen — the focus view only renders under the fullscreen
+// TUI, so pinning both makes the intended mobile-first view the default.
+//
+// Semantics mirror EnsureTUIFullscreen:
+//   - Missing settings.json → no-op. Never create it.
+//   - Invalid JSON → return error.
+//   - Absent key OR value == "default" → write "focus".
+//   - Any other value is respected as an explicit user choice.
+//   - Atomic write; preserves file mode.
+//
+// Reference: https://code.claude.com/docs/en/settings (viewMode).
+func EnsureViewModeFocus(path string) error {
+	return patchJSONFile(path, func(obj map[string]json.RawMessage) bool {
+		cur, present := obj["viewMode"]
+		if present && string(cur) != `"default"` {
+			return false
+		}
+		obj["viewMode"] = json.RawMessage(`"focus"`)
+		return true
+	})
+}

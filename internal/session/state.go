@@ -3,14 +3,33 @@ package session
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/RandomCodeSpace/ctm/internal/jsonstrict"
+	"github.com/RandomCodeSpace/ctm/internal/migrate"
 )
+
+// SchemaVersion is the current on-disk schema version of sessions.json.
+// Bump this and append a Step to the Plan returned by MigrationPlan()
+// whenever the shape of diskData or Session changes in a non-additive way.
+const SchemaVersion = 1
+
+// MigrationPlan returns the migrate.Plan for sessions.json. Steps is empty
+// at v1 because the initial migration only stamps the version — no content
+// changes are required to turn an unversioned sessions.json into v1.
+func MigrationPlan() migrate.Plan {
+	return migrate.Plan{
+		Name:           "sessions.json",
+		CurrentVersion: SchemaVersion,
+		Steps:          []migrate.Step{nil}, // v0 → v1: stamp only
+	}
+}
 
 var nameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$`)
 var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
@@ -68,7 +87,11 @@ func New(name, workdir, mode string) *Session {
 
 // diskData is the JSON structure persisted to disk.
 type diskData struct {
-	Sessions map[string]*Session `json:"sessions"`
+	// SchemaVersion is stamped onto sessions.json by the migrate runner on
+	// startup. save() force-sets it before every write so the file always
+	// round-trips through the migrator cleanly.
+	SchemaVersion int                 `json:"schema_version"`
+	Sessions      map[string]*Session `json:"sessions"`
 }
 
 // Store manages session persistence via a JSON file with flock-based locking.
@@ -102,23 +125,27 @@ func (s *Store) unlock(f *os.File) {
 }
 
 func (s *Store) load() (*diskData, error) {
-	data, err := os.ReadFile(s.path)
+	var d diskData
+	err := jsonstrict.Decode(s.path, &d)
 	if os.IsNotExist(err) {
 		return &diskData{Sessions: make(map[string]*Session)}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read sessions file: %w", err)
-	}
-	var d diskData
-	if err := json.Unmarshal(data, &d); err != nil {
-		// Back up the corrupt file and start fresh rather than failing all ops.
+		// Malformed JSON or type mismatch. Back up the corrupt file and
+		// start fresh rather than failing every subsequent Store op.
+		// (Unknown-field errors do not reach this branch — jsonstrict
+		// strips-and-rewrites and returns nil for that case; see
+		// internal/jsonstrict for the mitigation contract.)
+		data, _ := os.ReadFile(s.path) // best-effort for the copy fallback
 		backupPath := fmt.Sprintf("%s.corrupt.%d", s.path, time.Now().UnixNano())
 		if berr := os.Rename(s.path, backupPath); berr != nil {
-			// If rename fails, try a copy.
-			_ = os.WriteFile(backupPath, data, 0644)
+			_ = os.WriteFile(backupPath, data, 0600)
 			_ = os.Remove(s.path)
 		}
-		log.Printf("warning: sessions file was corrupt (JSON parse error: %v); backed up to %s and starting fresh", err, backupPath)
+		slog.Warn("sessions file was corrupt; backed up and starting fresh",
+			"parse_error", err,
+			"backup_path", backupPath,
+			"source_path", s.path)
 		return &diskData{Sessions: make(map[string]*Session)}, nil
 	}
 	if d.Sessions == nil {
@@ -128,12 +155,16 @@ func (s *Store) load() (*diskData, error) {
 }
 
 func (s *Store) save(d *diskData) error {
+	d.SchemaVersion = SchemaVersion
 	data, err := json.Marshal(d)
 	if err != nil {
 		return fmt.Errorf("marshal sessions: %w", err)
 	}
 	tmpPath := s.path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	// 0600: sessions.json contains session UUIDs, workdirs, and mode — not
+	// secrets per se, but personal state that doesn't need to be world- or
+	// group-readable even on shared hosts.
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
 		return fmt.Errorf("write sessions tmp file: %w", err)
 	}
 	if err := os.Rename(tmpPath, s.path); err != nil {
@@ -164,7 +195,7 @@ func (s *Store) backupLocked() (string, error) {
 		return "", fmt.Errorf("read sessions for backup: %w", err)
 	}
 	backupPath := fmt.Sprintf("%s.bak.%d", s.path, time.Now().UnixNano())
-	if err := os.WriteFile(backupPath, data, 0644); err != nil {
+	if err := os.WriteFile(backupPath, data, 0600); err != nil {
 		return "", fmt.Errorf("write backup file: %w", err)
 	}
 	return backupPath, nil
@@ -253,7 +284,8 @@ func (s *Store) DeleteAll() error {
 	defer s.unlock(lf)
 
 	if backupPath, err := s.backupLocked(); err == nil && backupPath != "" {
-		log.Printf("info: backed up sessions to %s before DeleteAll", backupPath)
+		slog.Info("backed up sessions before DeleteAll",
+			"backup_path", backupPath)
 	}
 
 	return s.save(&diskData{Sessions: make(map[string]*Session)})

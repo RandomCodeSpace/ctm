@@ -109,16 +109,12 @@ func buildSampleOverlay(statuslineCmd, logHookCmd string) string {
 
 // sampleEnvFile is the bash env script sourced by the tmux shell before
 // claude launches. Use this for env vars that claude reads during CLI
-// startup (e.g. CLAUDE_CODE_NO_FLICKER), which are too early for
-// settings.json's env key to affect.
+// startup, which are too early for settings.json's env key to affect.
 const sampleEnvFile = `# ctm-managed env file — sourced by the shell that spawns claude.
 # Only affects claude processes launched via ctm. Direct 'claude' calls
 # outside ctm are unaffected (this file is never sourced then).
 #
 # Add exports here for env vars claude reads early in startup.
-
-# Flicker-free rendering for streaming markdown/code blocks (v2.1.88+).
-export CLAUDE_CODE_NO_FLICKER=1
 
 # Enable experimental Agent Teams feature.
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
@@ -131,7 +127,11 @@ func writeEnvFile(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	// 0600: env.sh is sourced by the shell that spawns claude and is a
+	// natural place for users to park secrets (API keys, tokens). Default
+	// to owner-only so a user who drops a secret in doesn't leak it to
+	// other users on a shared host.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		if os.IsExist(err) {
 			return nil // keep user edits intact
@@ -181,7 +181,9 @@ func runOverlayInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// O_EXCL is atomic against concurrent creators — no TOCTOU race.
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	// 0600: personal claude config under ~/.config/ctm/ (0700 dir); no need
+	// to be world- or group-readable.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		if os.IsExist(err) {
 			return fmt.Errorf("overlay already exists at %s — delete it first or use `ctm overlay edit`", path)
@@ -231,7 +233,7 @@ func runOverlayEdit(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		_ = os.MkdirAll(sessionLogDir(), 0755)
-		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil && !os.IsExist(err) {
 			return fmt.Errorf("creating overlay: %w", err)
 		}
