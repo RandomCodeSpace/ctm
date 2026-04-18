@@ -64,9 +64,8 @@ Grab the archive for your platform from the [latest release](https://github.com/
 | Linux ARM64 | `ctm-<version>-linux-arm64.tar.gz` |
 | macOS (Intel) | `ctm-<version>-darwin-amd64.tar.gz` |
 | macOS (Apple Silicon) | `ctm-<version>-darwin-arm64.tar.gz` |
-| Windows x86_64 | `ctm-<version>-windows-amd64.zip` |
 
-Every asset is accompanied by a `SHA256SUMS` file; verify with `sha256sum -c SHA256SUMS`.
+Every asset is accompanied by a `SHA256SUMS` file; verify with `sha256sum -c SHA256SUMS`. Windows users: run the Linux binary under WSL — tmux has no native Windows support.
 
 ### Version-pinned (recommended)
 

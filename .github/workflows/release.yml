@@ -99,7 +99,8 @@ jobs:
             echo "| Linux ARM64 | \`ctm-${VERSION}-linux-arm64.tar.gz\` |"
             echo "| macOS (Intel) | \`ctm-${VERSION}-darwin-amd64.tar.gz\` |"
             echo "| macOS (Apple Silicon) | \`ctm-${VERSION}-darwin-arm64.tar.gz\` |"
-            echo "| Windows x86_64 | \`ctm-${VERSION}-windows-amd64.zip\` |"
+            echo
+            echo 'Windows users: run the Linux binary under WSL — tmux has no native Windows support.'
             echo
             echo '### From source'
             echo
@@ -165,34 +166,30 @@ jobs:
           #   -X ...Version=  : inject the release tag so `ctm version` reports it
           LDFLAGS="-s -w -X github.com/${REPO}/cmd.Version=${VERSION}"
 
-          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
+          # Windows is not a target: ctm depends on tmux (not natively
+          # available on Windows) and uses POSIX syscalls like
+          # syscall.Flock in internal/logrotate / internal/session.
+          # Windows users run the Linux binary under WSL.
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
             goos="${target%-*}"
             goarch="${target#*-}"
             stage="ctm-${VERSION}-${target}"
             mkdir -p "dist/${stage}"
 
-            ext=""
-            if [ "$goos" = "windows" ]; then ext=".exe"; fi
-
             echo "→ building ${target}"
             CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
               go build -trimpath -ldflags "$LDFLAGS" \
-              -o "dist/${stage}/ctm${ext}" \
+              -o "dist/${stage}/ctm" \
               ./
 
             cp LICENSE README.md "dist/${stage}/"
-
-            if [ "$goos" = "windows" ]; then
-              (cd dist && zip -qr "${stage}.zip" "${stage}" && rm -rf "${stage}")
-            else
-              (cd dist && tar -czf "${stage}.tar.gz" "${stage}" && rm -rf "${stage}")
-            fi
+            (cd dist && tar -czf "${stage}.tar.gz" "${stage}" && rm -rf "${stage}")
           done
 
           # --- SHA256SUMS over every artifact ---
           #
           # GNU coreutils format (`sha256sum -c SHA256SUMS` verifies).
-          (cd dist && sha256sum ctm-*.tar.gz ctm-*.zip > SHA256SUMS)
+          (cd dist && sha256sum ctm-*.tar.gz > SHA256SUMS)
 
           echo "Artifacts:"
           ls -lh dist
@@ -227,5 +224,4 @@ jobs:
             --title "$VERSION" \
             --notes-file release-notes.md \
             dist/ctm-*.tar.gz \
-            dist/ctm-*.zip \
             dist/SHA256SUMS
