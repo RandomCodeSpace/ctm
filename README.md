@@ -154,14 +154,14 @@ When the overlay file exists, ctm-spawned claude invocations get `--settings <pa
 ctm ships a 3-line statusLine renderer (`ctm statusline`) that the overlay wires into Claude Code as `statusLine.command`. Layout:
 
 ```
-Opus 4.7 (1M) · ~/projects/ctm
+Opus 4.7 (1M)  ~/projects/ctm
 c 49% (486.8k)  w 34%  h 25%
-↑ 118.6k  ↓ 434.8k
+↑ 118.6k  ↓ 434.8k  xhigh
 ```
 
 - **Line 1** — model name (redundant `Claude` / `claude-` prefix stripped) and project dir (OSC 8 hyperlinked to the `origin` remote when a `.git/config` is found).
 - **Line 2** — `c` context used + tokens currently consumed (input-only sum per Claude Code's formula), `w` weekly rate-limit usage, `h` 5-hour rate-limit usage. Percentages taken verbatim from the payload; parenthesised token count formatted with SI suffix (`k` / `M` / `B`).
-- **Line 3** — `↑` cumulative session input tokens, `↓` cumulative session output tokens. Same SI formatting.
+- **Line 3** — `↑` cumulative session input tokens, `↓` cumulative session output tokens (SI-formatted). Current `/effort` level is appended dim-gray (`min`/`low`/`medium`/`high`/`xhigh`/`max`), sourced from `~/.claude/settings.json` since Claude Code's statusLine payload does not expose it.
 
 Sections with missing payload fields are silently skipped, and at the default `INFO` log level nothing is written to stderr. To wire it into Claude Code outside a ctm-spawned session too, set `statusLine` in `~/.claude/settings.json`:
 
