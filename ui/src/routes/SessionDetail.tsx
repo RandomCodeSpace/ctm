@@ -19,6 +19,8 @@ import { AttentionLabel } from "@/components/AttentionLabel";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { LogDiskUsage } from "@/components/LogDiskUsage";
 import { CostChart } from "@/components/CostChart";
+import { SubagentTree } from "@/components/SubagentTree";
+import { AgentTeamsPanel } from "@/components/AgentTeamsPanel";
 import { useSession, type Session } from "@/hooks/useSessions";
 import { useCheckpoints, type Checkpoint } from "@/hooks/useCheckpoints";
 import { relativeTime, shortenPath } from "@/lib/format";
@@ -29,11 +31,19 @@ interface SessionDetailProps {
   embedded?: boolean;
 }
 
-type TabKey = "feed" | "checkpoints" | "pane" | "meta";
+type TabKey =
+  | "feed"
+  | "checkpoints"
+  | "pane"
+  | "subagents"
+  | "teams"
+  | "meta";
 
 function tabFromPath(pathname: string): TabKey {
   if (pathname.endsWith("/checkpoints")) return "checkpoints";
   if (pathname.endsWith("/pane")) return "pane";
+  if (pathname.endsWith("/subagents")) return "subagents";
+  if (pathname.endsWith("/teams")) return "teams";
   if (pathname.endsWith("/meta")) return "meta";
   return "feed";
 }
@@ -131,6 +141,8 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
         <TabsList className="h-auto shrink-0 justify-start rounded-none border-b border-border bg-bg px-4 py-0">
           <TabTrigger value="feed">Feed</TabTrigger>
           <TabTrigger value="checkpoints">Checkpoints</TabTrigger>
+          <TabTrigger value="subagents">Subagents</TabTrigger>
+          <TabTrigger value="teams">Teams</TabTrigger>
           <TabTrigger value="pane">Pane</TabTrigger>
           <TabTrigger value="meta">Meta</TabTrigger>
         </TabsList>
@@ -144,6 +156,20 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
           className="m-0 flex min-h-0 flex-1 flex-col"
         >
           <CheckpointsTab sessionName={name} />
+        </TabsContent>
+
+        <TabsContent
+          value="subagents"
+          className="m-0 flex min-h-0 flex-1 flex-col"
+        >
+          <SubagentTree sessionName={name} />
+        </TabsContent>
+
+        <TabsContent
+          value="teams"
+          className="m-0 flex min-h-0 flex-1 flex-col"
+        >
+          <AgentTeamsPanel sessionName={name} />
         </TabsContent>
 
         <TabsContent

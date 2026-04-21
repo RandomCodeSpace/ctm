@@ -532,6 +532,16 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// free of the store dependency.
 	mux.Handle("GET /api/cost", authHF(api.Cost(costSourceAdapter{s.cost})))
 
+	// V15/V16 — subagent tree + agent teams. Both replay the session's
+	// JSONL to infer lifecycle (parseSubagentMeta → start; last-tool-
+	// call-ts → stop/running; is_error → failed). Teams are a 2 s
+	// dispatch-window heuristic until Claude Code emits explicit
+	// team events.
+	mux.Handle("GET /api/sessions/{name}/subagents",
+		authHF(api.Subagents(s.logDir, logsUUIDResolver{proj: s.proj})))
+	mux.Handle("GET /api/sessions/{name}/teams",
+		authHF(api.Teams(s.logDir, logsUUIDResolver{proj: s.proj})))
+
 	// V6 historical feed scroll. Returns tool_call rows older than a
 	// cursor by reading backwards over the session's JSONL log, so the
 	// UI's Load-older button can walk past the 500-slot hub ring.

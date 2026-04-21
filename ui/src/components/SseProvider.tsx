@@ -199,6 +199,30 @@ export function SseProvider({ children }: { children: ReactNode }) {
           });
           break;
         }
+        // V15 — subagent lifecycle. The tailer emits `subagent_start`
+        // when a new agent_id first appears in the session's JSONL;
+        // we invalidate both the subagent forest and the derived
+        // teams list since a new subagent may reshape the dispatch-
+        // window clusters.
+        case "subagent_start":
+        case "subagent_stop": {
+          const session = (data as { session?: string }).session;
+          if (session) {
+            queryClient.invalidateQueries({ queryKey: ["subagents", session] });
+            queryClient.invalidateQueries({ queryKey: ["teams", session] });
+          }
+          break;
+        }
+        // V16 — team lifecycle. If/when the backend emits explicit
+        // team_spawn / team_settled events, the UI just refetches.
+        case "team_spawn":
+        case "team_settled": {
+          const session = (data as { session?: string }).session;
+          if (session) {
+            queryClient.invalidateQueries({ queryKey: ["teams", session] });
+          }
+          break;
+        }
       }
     },
     [queryClient],

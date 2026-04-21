@@ -72,6 +72,12 @@ func (t *Tailer) Run(ctx context.Context) error {
 		offset int64
 	)
 
+	// subagentSeen tracks which agent_ids we've already fired
+	// `subagent_start` for on this tailer — used to keep the SSE
+	// signal idempotent when the tailer re-scans the same byte range
+	// after a transient fsnotify hiccup.
+	subagentSeen := make(map[string]bool)
+
 	openAndScan := func() {
 		f, err := os.Open(t.LogPath)
 		if err != nil {
@@ -83,7 +89,7 @@ func (t *Tailer) Run(ctx context.Context) error {
 		}
 		fh = f
 		offset = 0
-		scan(fh, &offset, t.SessionName, t.Hub)
+		scan(fh, &offset, t.SessionName, t.Hub, subagentSeen)
 	}
 
 	closeFile := func() {
@@ -113,7 +119,7 @@ func (t *Tailer) Run(ctx context.Context) error {
 				if fh == nil {
 					openAndScan()
 				} else {
-					scan(fh, &offset, t.SessionName, t.Hub)
+					scan(fh, &offset, t.SessionName, t.Hub, subagentSeen)
 				}
 			case ev.Op&fsnotify.Create == fsnotify.Create:
 				closeFile()
@@ -133,7 +139,15 @@ func (t *Tailer) Run(ctx context.Context) error {
 
 // scan reads from *offset to EOF, parses each JSONL line, and publishes
 // a tool_call event per line. Advances *offset by bytes consumed.
-func scan(fh *os.File, offset *int64, sessionName string, hub *events.Hub) {
+//
+// subagentSeen tracks already-announced agent_ids: whenever we see a
+// tool_call whose raw line carries an `agent_id` we haven't observed
+// yet for this session, we emit a sibling `subagent_start` event so
+// the UI's Subagents tab and Teams tab can wake up and refetch. Stop
+// events are not emitted live — completion is inferred server-side
+// from "no tool calls for N seconds" when the JSONL is replayed (see
+// api.Subagents).
+func scan(fh *os.File, offset *int64, sessionName string, hub *events.Hub, subagentSeen map[string]bool) {
 	if _, err := fh.Seek(*offset, io.SeekStart); err != nil {
 		slog.Warn("tailer seek failed", "session", sessionName, "err", err)
 		return
@@ -157,6 +171,23 @@ func scan(fh *os.File, offset *int64, sessionName string, hub *events.Hub) {
 				continue
 			}
 			hub.Publish(ev)
+
+			// Best-effort subagent_start detection. parseSubagentMeta
+			// decodes just the agent_id/agent_type/ctm_timestamp
+			// fields from the same raw line; if we've already seen
+			// this agent_id we skip the notification. Parse errors
+			// here are non-fatal — the upstream tool_call event was
+			// already published.
+			if subagentSeen != nil {
+				if meta, ok := parseSubagentMeta(trimmed); ok {
+					if !subagentSeen[meta.AgentID] {
+						subagentSeen[meta.AgentID] = true
+						if startEv, serr := buildSubagentStartEvent(sessionName, meta); serr == nil {
+							hub.Publish(startEv)
+						}
+					}
+				}
+			}
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
