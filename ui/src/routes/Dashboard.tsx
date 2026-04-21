@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Stethoscope } from "lucide-react";
+import { Settings, Stethoscope } from "lucide-react";
 import { QuotaStrip } from "@/components/QuotaStrip";
 import { SessionListPanel } from "@/components/SessionListPanel";
+import { SettingsDrawer } from "@/components/SettingsDrawer";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SessionDetail } from "@/routes/SessionDetail";
 import { sortSessions, useSessions } from "@/hooks/useSessions";
@@ -27,6 +28,7 @@ export function Dashboard() {
   const { name } = useParams<{ name?: string }>();
   const navigate = useNavigate();
   const { data: sessions } = useSessions();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Desktop-only: when nothing is selected, auto-navigate to the top
   // active session. Uses the same sortSessions order as the list so
@@ -61,9 +63,22 @@ export function Dashboard() {
           >
             <Stethoscope size={16} aria-hidden />
           </Link>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open settings"
+            title="Settings"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
+          >
+            <Settings size={16} aria-hidden />
+          </button>
           <ThemeToggle />
         </div>
       </header>
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
 
       <div className="shrink-0">
         <QuotaStrip />

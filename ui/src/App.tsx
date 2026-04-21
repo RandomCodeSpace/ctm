@@ -27,6 +27,7 @@ const router = createBrowserRouter([
   { path: "/", element: <Dashboard /> },
   { path: "/s/:name", element: <Dashboard /> },
   { path: "/s/:name/checkpoints", element: <Dashboard /> },
+  { path: "/s/:name/pane", element: <Dashboard /> },
   { path: "/s/:name/meta", element: <Dashboard /> },
   { path: "/feed", element: <FeedFullscreen /> },
   { path: "/doctor", element: <DoctorPanel /> },

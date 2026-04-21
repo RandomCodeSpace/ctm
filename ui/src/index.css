@@ -184,3 +184,91 @@ body {
 .ctm-row-in {
   animation: ctm-row-in 100ms ease-out;
 }
+
+/*
+ * V24 — ANSI SGR palette for the live pane capture viewer. Coarse
+ * mapping onto existing theme tokens (we are not trying to be a true
+ * terminal palette — this is an editorial read-only viewer).
+ * Normal + bright variants share the same token by design.
+ */
+.ansi-bold {
+  font-weight: 600;
+}
+.ansi-fg-black,
+.ansi-fg-bright-black {
+  color: var(--fg-dim);
+}
+.ansi-fg-red,
+.ansi-fg-bright-red {
+  color: var(--alert-ember);
+}
+.ansi-fg-green,
+.ansi-fg-bright-green {
+  color: var(--live-dot);
+}
+.ansi-fg-yellow,
+.ansi-fg-bright-yellow {
+  color: var(--accent-gold);
+}
+.ansi-fg-blue,
+.ansi-fg-bright-blue {
+  color: #7aa2f7;
+}
+.ansi-fg-magenta,
+.ansi-fg-bright-magenta {
+  color: #c0a8e0;
+}
+.ansi-fg-cyan,
+.ansi-fg-bright-cyan {
+  color: #7fd8c9;
+}
+.ansi-fg-white,
+.ansi-fg-bright-white {
+  color: var(--fg);
+}
+.ansi-bg-black,
+.ansi-bg-bright-black {
+  background-color: var(--surface-2);
+}
+.ansi-bg-red,
+.ansi-bg-bright-red {
+  background-color: color-mix(in srgb, var(--alert-ember) 40%, transparent);
+}
+.ansi-bg-green,
+.ansi-bg-bright-green {
+  background-color: color-mix(in srgb, var(--live-dot) 25%, transparent);
+}
+.ansi-bg-yellow,
+.ansi-bg-bright-yellow {
+  background-color: color-mix(in srgb, var(--accent-gold) 25%, transparent);
+}
+.ansi-bg-blue,
+.ansi-bg-bright-blue {
+  background-color: #24304a;
+}
+.ansi-bg-magenta,
+.ansi-bg-bright-magenta {
+  background-color: #382c44;
+}
+.ansi-bg-cyan,
+.ansi-bg-bright-cyan {
+  background-color: #1f3a3a;
+}
+.ansi-bg-white,
+.ansi-bg-bright-white {
+  background-color: var(--surface);
+}
+
+/* Pulse for the "Live" indicator on the Pane tab. */
+@keyframes ctm-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.ctm-live-pulse {
+  animation: ctm-live-pulse 1.5s ease-in-out infinite;
+}

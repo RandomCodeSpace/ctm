@@ -109,15 +109,33 @@ type Server struct {
 	requestCtx    context.Context
 	requestCancel context.CancelFunc
 
-	token     string
-	hub       *events.Hub
-	proj      *ingest.Projection
-	tailers   *ingest.TailerManager
-	quota     *ingest.QuotaIngester
-	cpCache   *api.CheckpointsCache
-	attention *attention.Engine
-	webhook   *webhook.Dispatcher
-	logDir    string
+	// runCancel, set by Run, cancels the root context driving all
+	// background goroutines. Shutdown() triggers it so in-process
+	// callers (e.g. PATCH /api/config) can bring the daemon down
+	// without a signal.
+	runCancel context.CancelFunc
+
+	token      string
+	hub        *events.Hub
+	proj       *ingest.Projection
+	tailers    *ingest.TailerManager
+	quota      *ingest.QuotaIngester
+	cpCache    *api.CheckpointsCache
+	attention  *attention.Engine
+	webhook    *webhook.Dispatcher
+	tmuxClient *tmux.Client
+	logDir     string
+}
+
+// Shutdown cancels the daemon's root context so Run(ctx) returns and
+// callers that want to respawn (e.g. config save → restart) can do so
+// via proc.EnsureServeRunning. Safe to call more than once; no-op if
+// Run hasn't started or has already returned.
+func (s *Server) Shutdown(reason string) {
+	slog.Info("ctm serve shutdown requested", "reason", reason)
+	if s.runCancel != nil {
+		s.runCancel()
+	}
 }
 
 // New binds the listener, loads the bearer token, constructs the hub
@@ -169,7 +187,8 @@ func New(opts Options) (*Server, error) {
 	}
 
 	hub := events.NewHub(0)
-	proj := ingest.New(sessionsPath, tmux.NewClient(tmuxConf))
+	tmuxClient := tmux.NewClient(tmuxConf)
+	proj := ingest.New(sessionsPath, tmuxClient)
 	quota := ingest.NewQuotaIngester(dumpDir, proj, hub)
 	cpCache := api.NewCheckpointsCache()
 
@@ -219,6 +238,7 @@ func New(opts Options) (*Server, error) {
 		cpCache:       cpCache,
 		attention:     attEngine,
 		webhook:       disp,
+		tmuxClient:    tmuxClient,
 		logDir:        logDir,
 	}
 
@@ -243,6 +263,12 @@ func (s *Server) Hub() *events.Hub { return s.hub }
 // Run blocks until ctx is cancelled, then gracefully shuts down.
 // Returns nil on clean shutdown; propagates non-ErrServerClosed errors.
 func (s *Server) Run(ctx context.Context) error {
+	// Wrap the caller's ctx so Shutdown() can trigger the same
+	// cascading-cancel path that a parent SIGINT would.
+	ctx, runCancel := context.WithCancel(ctx)
+	s.runCancel = runCancel
+	defer runCancel()
+
 	// Synchronous initial projection load before the polling goroutine
 	// starts; the tailer-spawn loop below depends on All() being
 	// populated, otherwise it sees an empty list and no tailers fire
@@ -473,6 +499,17 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		"GET /api/sessions/{name}/tool_calls/{id}/detail",
 		authHF(api.ToolCallDetail(api.NewJSONLLogReader(s.logDir, s.proj))),
 	)
+
+	// V24 live tmux pane capture. 1 Hz SSE of `tmux capture-pane -e -p`
+	// output; frames are debounced on identical payloads so idle panes
+	// stay quiet. The handler exits when the client disconnects.
+	mux.Handle("GET /events/session/{name}/pane", authHF(api.PaneStream(s.tmuxClient)))
+
+	// Settings drawer (webhook URL + attention thresholds). GET returns
+	// the current config; PATCH applies a subset and triggers a daemon
+	// restart so the new config takes effect on the next user action.
+	mux.Handle("GET /api/config", authHF(api.ConfigGet(config.ConfigPath())))
+	mux.Handle("PATCH /api/config", authHF(api.ConfigUpdate(config.ConfigPath(), s.Shutdown)))
 
 	// Debug: hub counters + subscriber count. Gated on auth; useful
 	// from curl to check whether publishes are flowing and whether

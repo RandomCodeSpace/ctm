@@ -120,6 +120,23 @@ func (c *Client) PanePID(name string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// CapturePane returns the current visible contents of the pane in the
+// named session. `-e` preserves escape sequences (colour) so the
+// consumer can render ANSI; `-p` prints to stdout instead of a buffer.
+// Follows the same CLI-shell-out style as PaneCommand / PanePID.
+func (c *Client) CapturePane(name string) (string, error) {
+	args := []string{}
+	if c.confPath != "" {
+		args = append(args, "-f", c.confPath)
+	}
+	args = append(args, "capture-pane", "-e", "-p", "-t", name)
+	out, err := exec.Command("tmux", args...).Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 // RespawnPane respawns the pane in the named session with the given shell command.
 // The command is wrapped in /bin/sh -c so shell operators (||, &&) are interpreted.
 // Unlike new-session, respawn-pane does not invoke $SHELL -c automatically.

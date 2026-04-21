@@ -12,6 +12,7 @@ import { FeedStream } from "@/components/FeedStream";
 import { CheckpointRow } from "@/components/CheckpointRow";
 import { RevertSheet } from "@/components/RevertSheet";
 import { DiffSheet } from "@/components/DiffSheet";
+import { PaneView } from "@/components/PaneView";
 import { HealthDot, healthState } from "@/components/HealthDot";
 import { AttentionLabel } from "@/components/AttentionLabel";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
@@ -26,10 +27,11 @@ interface SessionDetailProps {
   embedded?: boolean;
 }
 
-type TabKey = "feed" | "checkpoints" | "meta";
+type TabKey = "feed" | "checkpoints" | "pane" | "meta";
 
 function tabFromPath(pathname: string): TabKey {
   if (pathname.endsWith("/checkpoints")) return "checkpoints";
+  if (pathname.endsWith("/pane")) return "pane";
   if (pathname.endsWith("/meta")) return "meta";
   return "feed";
 }
@@ -127,6 +129,7 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
         <TabsList className="h-auto shrink-0 justify-start rounded-none border-b border-border bg-bg px-4 py-0">
           <TabTrigger value="feed">Feed</TabTrigger>
           <TabTrigger value="checkpoints">Checkpoints</TabTrigger>
+          <TabTrigger value="pane">Pane</TabTrigger>
           <TabTrigger value="meta">Meta</TabTrigger>
         </TabsList>
 
@@ -139,6 +142,13 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
           className="m-0 flex min-h-0 flex-1 flex-col"
         >
           <CheckpointsTab sessionName={name} />
+        </TabsContent>
+
+        <TabsContent
+          value="pane"
+          className="m-0 flex min-h-0 flex-1 flex-col"
+        >
+          <PaneView sessionName={name} />
         </TabsContent>
 
         <TabsContent value="meta" className="m-0 flex-1 overflow-y-auto">
