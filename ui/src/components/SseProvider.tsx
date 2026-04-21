@@ -125,7 +125,10 @@ export function SseProvider({ children }: { children: ReactNode }) {
           break;
         }
         case "tool_call": {
-          const row = data as unknown as ToolCallRow;
+          // Stamp the hub Event.ID onto the row so ToolCallRow (V9)
+          // can fetch detail on expand. The payload itself doesn't
+          // carry its own id — SSE envelopes it separately.
+          const row = { ...(data as unknown as ToolCallRow), id: ev.id } as ToolCallRow;
           queryClient.setQueryData<ToolCallRow[]>(
             ["feed", "all"],
             (prev) => appendCapped(prev, row),

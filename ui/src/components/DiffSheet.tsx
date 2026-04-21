@@ -13,6 +13,7 @@ import type { Checkpoint } from "@/hooks/useCheckpoints";
 import { useCheckpointDiff } from "@/hooks/useCheckpoints";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { classifyLine } from "@/lib/diff";
 
 interface DiffSheetProps {
   sessionName: string;
@@ -139,9 +140,7 @@ function DiffLine({ line }: DiffLineProps) {
   );
 }
 
-export function classifyLine(line: string): string {
-  if (line.startsWith("@@")) return "text-fg-dim";
-  if (line.startsWith("+")) return "text-emerald-400";
-  if (line.startsWith("-")) return "text-alert-ember";
-  return "text-fg";
-}
+// Re-export the shared classifier so existing imports
+// (`DiffSheet.test.tsx`, potential future consumers) keep working
+// without touching the public surface.
+export { classifyLine };

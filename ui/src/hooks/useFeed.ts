@@ -14,6 +14,13 @@ export interface ToolCallRow {
    * "ok"); when present or `is_error` is true, renders as "err <n>".
    */
   exit_code?: number;
+  /**
+   * V9 — hub Event.ID carried through SseProvider so ToolCallRow can
+   * fetch full detail (diff for Edit/MultiEdit/Write) on expand.
+   * Absent for REST-seeded rows from /api/feed — those can still render
+   * but the expand control won't fire until a live SSE row arrives.
+   */
+  id?: string;
 }
 
 /**

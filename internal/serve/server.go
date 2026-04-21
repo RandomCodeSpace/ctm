@@ -466,6 +466,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Slice 2 (UI bar) consumes this; slice 3 (FTS5) is deferred to v0.3.
 	mux.Handle("GET /api/search", authHF(api.Search(s.logDir, logsUUIDResolver{proj: s.proj})))
 
+	// V9 inline Edit/Write diff viewer — looks up a single tool_call
+	// row by its hub event ID and returns a rendered unified diff when
+	// the tool is Edit/MultiEdit/Write.
+	mux.Handle(
+		"GET /api/sessions/{name}/tool_calls/{id}/detail",
+		authHF(api.ToolCallDetail(api.NewJSONLLogReader(s.logDir, s.proj))),
+	)
+
 	// Debug: hub counters + subscriber count. Gated on auth; useful
 	// from curl to check whether publishes are flowing and whether
 	// the browser is actually subscribed.
