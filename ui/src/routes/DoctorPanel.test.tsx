@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { DoctorPanel } from "@/routes/DoctorPanel";
 import { TOKEN_KEY } from "@/lib/api";
 
@@ -19,9 +20,11 @@ function renderPanel() {
   });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <DoctorPanel />
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter>
+          <DoctorPanel />
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }
@@ -32,6 +35,22 @@ describe("DoctorPanel", () => {
   beforeEach(() => {
     originalFetch = globalThis.fetch;
     localStorage.setItem(TOKEN_KEY, "test-token");
+    // JSDOM does not implement matchMedia; ThemeProvider needs it.
+    if (typeof window.matchMedia !== "function") {
+      Object.defineProperty(window, "matchMedia", {
+        writable: true,
+        value: (query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }),
+      });
+    }
   });
 
   afterEach(() => {

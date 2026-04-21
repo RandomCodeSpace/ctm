@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { isStale, type Session } from "@/hooks/useSessions";
 import { HealthDot, healthState } from "@/components/HealthDot";
 import { AttentionLabel } from "@/components/AttentionLabel";
+import { ToolFrequencySparkline } from "@/components/ToolFrequencySparkline";
 import { compactNumber, relativeTime, shortenPath } from "@/lib/format";
 import { pctColor } from "@/lib/quota";
 import { cn } from "@/lib/utils";
@@ -141,6 +142,7 @@ export function SessionCard({ session, active }: SessionCardProps) {
             color="var(--accent-gold)"
             value={session.tokens.cache_tokens}
           />
+          <ToolFrequencySparkline sessionName={session.name} />
         </div>
       )}
 

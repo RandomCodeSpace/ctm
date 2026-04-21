@@ -65,6 +65,44 @@ test.describe("Dashboard", () => {
     await expect(fill).toHaveAttribute("style", /width:\s*95%/);
   });
 
+  test("renders the tool-frequency sparkline when the feed has events", async ({
+    page,
+  }) => {
+    // Seed the SSE stream with 6 tool_call events spread across 10 min.
+    // The sparkline component reads from the SseProvider-populated feed
+    // cache, so we route /events/all to deliver synthetic events once.
+    const now = Date.now();
+    const lines: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const ts = new Date(now - i * 60_000).toISOString();
+      const id = `${now - i * 60_000}000000-0`;
+      const data = JSON.stringify({
+        session: "alpha",
+        tool: "Bash",
+        input: "",
+        is_error: false,
+        ts,
+      });
+      lines.push(`id: ${id}\nevent: tool_call\ndata: ${data}\n\n`);
+    }
+    await page.route(
+      "**/events/all",
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: ": ok\n\n" + lines.join(""),
+        }),
+      { times: 1 },
+    );
+    await page.goto("/");
+    const card = page.getByRole("link", { name: /alpha/i }).first();
+    const svg = card.locator(
+      'svg[aria-label*="tool call frequency" i]',
+    );
+    await expect(svg).toBeVisible();
+  });
+
   test("renders the stale chip when tool call is older than 30 min", async ({
     page,
   }) => {
