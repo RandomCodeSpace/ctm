@@ -13,6 +13,7 @@ import { CheckpointRow } from "@/components/CheckpointRow";
 import { RevertSheet } from "@/components/RevertSheet";
 import { DiffSheet } from "@/components/DiffSheet";
 import { PaneView } from "@/components/PaneView";
+import { fetchFeedHistory } from "@/hooks/useFeedHistory";
 import { HealthDot, healthState } from "@/components/HealthDot";
 import { AttentionLabel } from "@/components/AttentionLabel";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
@@ -257,7 +258,11 @@ function FeedTab({ sessionName }: { sessionName: string }) {
           label="Bash"
         />
       </div>
-      <FeedStream sessionName={sessionName} bashOnly={filter === "bash"} />
+      <FeedStream
+        sessionName={sessionName}
+        bashOnly={filter === "bash"}
+        onLoadOlder={(beforeId) => fetchFeedHistory(sessionName, beforeId)}
+      />
     </>
   );
 }

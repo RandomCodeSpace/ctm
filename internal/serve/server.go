@@ -492,6 +492,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Slice 2 (UI bar) consumes this; slice 3 (FTS5) is deferred to v0.3.
 	mux.Handle("GET /api/search", authHF(api.Search(s.logDir, logsUUIDResolver{proj: s.proj})))
 
+	// V6 historical feed scroll. Returns tool_call rows older than a
+	// cursor by reading backwards over the session's JSONL log, so the
+	// UI's Load-older button can walk past the 500-slot hub ring.
+	mux.Handle(
+		"GET /api/sessions/{name}/feed/history",
+		authHF(api.FeedHistory(s.logDir, logsUUIDResolver{proj: s.proj})),
+	)
+
 	// V9 inline Edit/Write diff viewer — looks up a single tool_call
 	// row by its hub event ID and returns a rendered unified diff when
 	// the tool is Edit/MultiEdit/Write.
