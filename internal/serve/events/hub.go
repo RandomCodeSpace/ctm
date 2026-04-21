@@ -282,7 +282,10 @@ func (h *Hub) removeSub(s *Sub) {
 	delete(h.subs, s)
 	remaining := len(h.subs)
 	h.mu.Unlock()
-	slog.Info("hub unsubscribe",
+	// Debug-level: tab closes, navigations, and fetch-event-source
+	// reconnects all produce unsubscribes. Watching these at Info is
+	// too chatty for normal operation.
+	slog.Debug("hub unsubscribe",
 		"filter", s.filter, "dropped", s.dropped.Load(),
 		"subscribers_after", remaining)
 }

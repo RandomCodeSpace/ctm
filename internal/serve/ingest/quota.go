@@ -310,7 +310,11 @@ func (q *QuotaIngester) publishSession(name string) {
 		"output_tokens": s.outputTokens,
 		"cache_tokens":  s.cacheTokens,
 	})
-	slog.Info("quota publish session",
+	// Debug-level: fires on every statusline dump where any token
+	// field changed, which during active sessions is multiple times a
+	// second. Global-quota publishes stay at Info — they only move
+	// when rate-limit buckets actually shift.
+	slog.Debug("quota publish session",
 		"session", name, "context_pct", s.contextPct,
 		"input", s.inputTokens, "output", s.outputTokens, "cache", s.cacheTokens)
 	q.hub.Publish(events.Event{Type: "quota_update", Session: name, Payload: body})
