@@ -485,7 +485,10 @@ func (e quotaEnricher) ContextPct(name string) (int, bool) {
 }
 
 func (e quotaEnricher) LastToolCallAt(name string) (time.Time, bool) {
-	return time.Time{}, false
+	if e.attention == nil {
+		return time.Time{}, false
+	}
+	return e.attention.LastToolCallAt(name)
 }
 
 func (e quotaEnricher) Attention(name string) (api.Attention, bool) {

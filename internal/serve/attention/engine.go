@@ -159,6 +159,20 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 }
 
+// LastToolCallAt returns the timestamp of the most recent tool_call
+// event observed for this session (from live stream or hub replay).
+// Exposed so the sessions API can surface real activity instead of
+// just last_attached_at — used as the primary list sort key.
+func (e *Engine) LastToolCallAt(name string) (time.Time, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st, ok := e.sessions_state[name]
+	if !ok || st.lastCall.IsZero() {
+		return time.Time{}, false
+	}
+	return st.lastCall, true
+}
+
 // Snapshot returns the current per-session snapshot. Returns ok=false
 // when no alert is active (StateClear).
 func (e *Engine) Snapshot(name string) (Snapshot, bool) {

@@ -30,9 +30,9 @@ export interface Session {
   workdir: string;
   created_at: string;
   last_attached_at?: string;
+  last_tool_call_at?: string;
   is_active: boolean;
   tmux_alive: boolean;
-  last_tool_call_at?: string;
   context_pct?: number;
   tokens?: TokenUsage;
   attention?: Attention;
@@ -54,8 +54,11 @@ export function useSession(name: string | undefined) {
 }
 
 /**
- * Severity ordering for sort. Higher = more urgent. Spec §5: list is sorted
- * by attention.severity DESC, last_attached_at DESC.
+ * Severity buckets from the v0.1 spec. Retained as an export so the
+ * SessionCard AttentionLabel can colour-code by urgency, but no longer
+ * the primary sort key — users found "stuck" sessions jumping to the
+ * top disorienting. The list sort is now age-only on most-recent
+ * activity (see sortSessions).
  */
 const SEVERITY: Record<string, number> = {
   permission_request: 60,
@@ -73,11 +76,15 @@ export function attentionSeverity(a: Attention | undefined): number {
   return SEVERITY[a.state] ?? 5;
 }
 
-/** Stable comparator for the active session list. */
+/** Most-recent activity timestamp for sort: prefer last tool call, fall
+ * back to last_attached_at, then created_at. */
+function activityMs(s: Session): number {
+  if (s.last_tool_call_at) return Date.parse(s.last_tool_call_at);
+  if (s.last_attached_at) return Date.parse(s.last_attached_at);
+  return s.created_at ? Date.parse(s.created_at) : 0;
+}
+
+/** Age-only comparator: newest tool-call activity first. */
 export function sortSessions(a: Session, b: Session): number {
-  const sb = attentionSeverity(b.attention) - attentionSeverity(a.attention);
-  if (sb !== 0) return sb;
-  const ta = a.last_attached_at ? Date.parse(a.last_attached_at) : 0;
-  const tb = b.last_attached_at ? Date.parse(b.last_attached_at) : 0;
-  return tb - ta;
+  return activityMs(b) - activityMs(a);
 }
