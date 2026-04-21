@@ -11,7 +11,13 @@ import (
 
 const (
 	defaultRingSize = 500
-	subChanBuffer   = 128
+	// subChanBuffer sized to absorb boot bursts without dropping: the
+	// quota ingester's catch-up scan + the tailer's initial JSONL
+	// replay can fan out dozens of events in a few ms before an
+	// internal subscriber's consumer loop gets scheduled. 1024 covers
+	// that comfortably at ~200 KB per subscriber worst-case, and still
+	// gives ordinary browser SSE tabs plenty of headroom.
+	subChanBuffer   = 1024
 	dropLogInterval = time.Minute
 )
 

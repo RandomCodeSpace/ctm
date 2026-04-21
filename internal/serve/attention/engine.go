@@ -92,6 +92,13 @@ type Engine struct {
 	thr      Thresholds
 	now      func() time.Time
 
+	// bootTime is the clock at NewEngine. Trigger C (stuck) uses
+	// max(st.lastCall, bootTime) as its reference so sessions whose
+	// only tool_call history came from a hub-ring replay don't
+	// instantly trip stuck with an ancient timestamp. A session that
+	// truly goes idle after boot will still fire after IdleMinutes.
+	bootTime time.Time
+
 	mu       sync.Mutex
 	sessions_state map[string]*sessionState
 }
@@ -116,6 +123,7 @@ func NewEngine(hub *events.Hub, quota QuotaSource, sessions SessionSource, thr T
 		sessions:       sessions,
 		thr:            thr,
 		now:            clock,
+		bootTime:       clock(),
 		sessions_state: make(map[string]*sessionState),
 	}
 }
@@ -464,9 +472,16 @@ func (e *Engine) pickState(
 		}
 	}
 
-	// C · stuck — idle > threshold while tmux alive.
+	// C · stuck — idle > threshold while tmux alive. Reference clamps
+	// to bootTime so an ancient tool_call recovered from the hub ring
+	// on daemon restart can't pre-age the signal; the session has to
+	// go idle for IdleMinutes *since we started watching*.
 	if e.thr.IdleMinutes > 0 && !st.lastCall.IsZero() {
-		if now.Sub(st.lastCall) > time.Duration(e.thr.IdleMinutes)*time.Minute {
+		ref := st.lastCall
+		if ref.Before(e.bootTime) {
+			ref = e.bootTime
+		}
+		if now.Sub(ref) > time.Duration(e.thr.IdleMinutes)*time.Minute {
 			return Snapshot{
 				State:   StateStuck,
 				Since:   e.sinceOr(st, StateStuck, now),

@@ -240,6 +240,44 @@ func TestTriggerC_Stuck(t *testing.T) {
 	}
 }
 
+// Regression: daemon restart replays old tool_calls from the hub ring
+// with timestamps > IdleMinutes ago. The previous implementation used
+// those timestamps directly and pre-tripped stuck on boot. Reference
+// now clamps to bootTime, so stuck can only fire on idle *since boot*.
+func TestTriggerC_Stuck_BootReplayDoesNotInstantlyFire(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	hub := events.NewHub(50)
+	q := newFakeQuota()
+	s := newFakeSessions("alpha")
+	thr := Defaults()
+	thr.IdleMinutes = 5
+	eng := newEngineAt(&now, hub, q, s, thr)
+
+	// Simulate ring replay: a tool_call from 10 minutes before boot.
+	ancient := now.Add(-10 * time.Minute)
+	eng.handleEvent(toolCallEv(t, "alpha", false, ancient))
+
+	// Immediately at boot: must NOT fire stuck.
+	eng.evaluateAll()
+	if snap, ok := eng.Snapshot("alpha"); ok {
+		t.Fatalf("stuck fired on replay at boot; snap=%+v", snap)
+	}
+
+	// 4 min after boot: still under the 5 min threshold since boot.
+	now = now.Add(4 * time.Minute)
+	eng.evaluateAll()
+	if snap, ok := eng.Snapshot("alpha"); ok {
+		t.Fatalf("stuck fired at 4 min since boot; snap=%+v", snap)
+	}
+
+	// 6 min since boot with no fresh tool_call → stuck fires now.
+	now = now.Add(2 * time.Minute)
+	eng.evaluateAll()
+	if snap, ok := eng.Snapshot("alpha"); !ok || snap.State != StateStuck {
+		t.Fatalf("want stuck at 6 min since boot; got %+v ok=%v", snap, ok)
+	}
+}
+
 func TestTriggerD_TmuxDead(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0).UTC()
 	hub := events.NewHub(50)

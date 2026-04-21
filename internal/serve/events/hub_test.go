@@ -134,7 +134,9 @@ func TestHub_SlowConsumerDrop(t *testing.T) {
 	slow, _ := h.Subscribe("", "")
 	defer slow.Close()
 
-	const n = 1000
+	// Anchor to the buffer size so this keeps testing "overflow"
+	// behaviour if subChanBuffer changes in the future.
+	n := subChanBuffer + 500
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -149,7 +151,7 @@ func TestHub_SlowConsumerDrop(t *testing.T) {
 		t.Fatalf("publisher blocked on slow consumer")
 	}
 
-	// Drain what slow can hold (subChanBuffer=128) and verify the rest were dropped.
+	// Drain what slow can hold (subChanBuffer) and verify the rest were dropped.
 	delivered := 0
 drain:
 	for {
@@ -166,7 +168,7 @@ drain:
 	if slow.Dropped() == 0 {
 		t.Fatal("expected non-zero dropped counter")
 	}
-	if uint64(delivered)+slow.Dropped() != n {
+	if uint64(delivered)+slow.Dropped() != uint64(n) {
 		t.Fatalf("delivered(%d) + dropped(%d) != %d", delivered, slow.Dropped(), n)
 	}
 	t.Logf("slow consumer: published=%d delivered=%d dropped=%d", n, delivered, slow.Dropped())
