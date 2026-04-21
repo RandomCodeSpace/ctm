@@ -26,6 +26,7 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/serve/events"
 	"github.com/RandomCodeSpace/ctm/internal/serve/ingest"
 	"github.com/RandomCodeSpace/ctm/internal/serve/webhook"
+	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
 
@@ -123,8 +124,9 @@ type Server struct {
 	cpCache    *api.CheckpointsCache
 	attention  *attention.Engine
 	webhook    *webhook.Dispatcher
-	tmuxClient *tmux.Client
-	logDir     string
+	tmuxClient   *tmux.Client
+	sessionStore *session.Store
+	logDir       string
 }
 
 // Shutdown cancels the daemon's root context so Run(ctx) returns and
@@ -188,6 +190,7 @@ func New(opts Options) (*Server, error) {
 
 	hub := events.NewHub(0)
 	tmuxClient := tmux.NewClient(tmuxConf)
+	sessionStore := session.NewStore(sessionsPath)
 	proj := ingest.New(sessionsPath, tmuxClient)
 	quota := ingest.NewQuotaIngester(dumpDir, proj, hub)
 	cpCache := api.NewCheckpointsCache()
@@ -236,10 +239,11 @@ func New(opts Options) (*Server, error) {
 		tailers:       ingest.NewTailerManager(logDir, hub),
 		quota:         quota,
 		cpCache:       cpCache,
-		attention:     attEngine,
-		webhook:       disp,
-		tmuxClient:    tmuxClient,
-		logDir:        logDir,
+		attention:    attEngine,
+		webhook:      disp,
+		tmuxClient:   tmuxClient,
+		sessionStore: sessionStore,
+		logDir:       logDir,
 	}
 
 	mux := http.NewServeMux()
@@ -518,6 +522,18 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// restart so the new config takes effect on the next user action.
 	mux.Handle("GET /api/config", authHF(api.ConfigGet(config.ConfigPath())))
 	mux.Handle("PATCH /api/config", authHF(api.ConfigUpdate(config.ConfigPath(), s.Shutdown)))
+
+	// V23 mutation endpoints: bearer + Origin-allowlist + type-to-confirm
+	// (for destructive ones) per docs/v02/V23-mutation-auth.md (A+B+D).
+	allowedOrigins := api.DefaultAllowedOrigins(s.opts.Port)
+	mux.Handle("POST /api/sessions/{name}/kill",
+		authHF(api.RequireOriginFunc(allowedOrigins, api.Kill(s.sessionStore, s.tmuxClient, s.proj))))
+	mux.Handle("POST /api/sessions/{name}/forget",
+		authHF(api.RequireOriginFunc(allowedOrigins, api.Forget(s.sessionStore, s.proj))))
+	mux.Handle("POST /api/sessions/{name}/rename",
+		authHF(api.RequireOriginFunc(allowedOrigins, api.Rename(s.sessionStore, s.tmuxClient, s.proj))))
+	mux.Handle("GET /api/sessions/{name}/attach-url",
+		authHF(api.RequireOriginFunc(allowedOrigins, api.AttachURL())))
 
 	// Debug: hub counters + subscriber count. Gated on auth; useful
 	// from curl to check whether publishes are flowing and whether
