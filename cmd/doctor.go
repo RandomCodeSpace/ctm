@@ -1,13 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/RandomCodeSpace/ctm/internal/config"
+	"github.com/RandomCodeSpace/ctm/internal/doctor"
 	"github.com/RandomCodeSpace/ctm/internal/output"
 	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 	"github.com/RandomCodeSpace/ctm/internal/session"
@@ -25,6 +26,10 @@ var doctorCmd = &cobra.Command{
 	RunE:  runDoctor,
 }
 
+// runDoctor is a thin CLI formatter over internal/doctor's shared
+// probe primitives. The grouped-section output is preserved byte-for-
+// byte from earlier releases (the V20 API endpoint uses the flat
+// doctor.Run() slice form instead — same probes, different rendering).
 func runDoctor(cmd *cobra.Command, args []string) error {
 	out := output.Stdout()
 
@@ -41,7 +46,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// --- Dependencies ---
 	out.Bold("Dependencies:")
 	for _, dep := range []string{"tmux", "claude", "git"} {
-		if path, err := exec.LookPath(dep); err == nil {
+		if path, ok := doctor.LookupBinary(dep); ok {
 			out.Success("  [OK] %-10s %s", dep, path)
 		} else {
 			out.Warn("  [MISSING] %s — not found in PATH", dep)
@@ -50,8 +55,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// --- Tmux version ---
-	if out2, err := exec.Command("tmux", "-V").Output(); err == nil {
-		out.Info("tmux version: %s", strings.TrimSpace(string(out2)))
+	if v, ok := doctor.TmuxVersion(context.Background()); ok {
+		out.Info("tmux version: %s", v)
 	} else {
 		out.Warn("tmux version: unavailable")
 	}

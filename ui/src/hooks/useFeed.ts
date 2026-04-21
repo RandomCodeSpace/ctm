@@ -7,6 +7,13 @@ export interface ToolCallRow {
   summary?: string;
   is_error: boolean;
   ts: string;
+  /**
+   * Optional exit code from Bash tool calls. Not emitted by the Go backend
+   * today — forward-compat field used by V10's Bash-only view. When absent
+   * and `is_error` is false, the row is considered successful (rendered as
+   * "ok"); when present or `is_error` is true, renders as "err <n>".
+   */
+  exit_code?: number;
 }
 
 /**

@@ -27,6 +27,44 @@ test.describe("Dashboard", () => {
     await expect(card.locator('time[aria-label="last tool call"]')).toBeVisible();
   });
 
+  test("renders the per-session context bar on the card", async ({ page }) => {
+    // Seeded session has context_pct: 42 → bar should be visible.
+    await page.goto("/");
+    const card = page.getByRole("link", { name: /alpha/i }).first();
+    await expect(card).toBeVisible();
+    const bar = card.getByRole("progressbar", { name: /context window/i });
+    await expect(bar).toBeVisible();
+    await expect(bar).toHaveAttribute("aria-valuenow", "42");
+  });
+
+  test("context bar turns ember at >=90%", async ({ page }) => {
+    await installMocks(page, {
+      sessions: [
+        {
+          name: "hot",
+          uuid: "00000000-0000-0000-0000-0000000000aa",
+          mode: "yolo",
+          workdir: "/home/dev/projects/ctm",
+          created_at: "2026-04-21T10:00:00Z",
+          last_attached_at: "2026-04-21T11:00:00Z",
+          last_tool_call_at: new Date(Date.now() - 5_000).toISOString(),
+          is_active: true,
+          tmux_alive: true,
+          context_pct: 95,
+        },
+      ],
+    });
+    await page.goto("/");
+    const card = page.getByRole("link", { name: /hot/i }).first();
+    const bar = card.getByRole("progressbar", { name: /context window/i });
+    await expect(bar).toBeVisible();
+    await expect(bar).toHaveAttribute("aria-valuenow", "95");
+    // The coloured fill is the first child; verify ember class + width.
+    const fill = bar.locator("> div").first();
+    await expect(fill).toHaveClass(/bg-alert-ember/);
+    await expect(fill).toHaveAttribute("style", /width:\s*95%/);
+  });
+
   test("renders the stale chip when tool call is older than 30 min", async ({
     page,
   }) => {

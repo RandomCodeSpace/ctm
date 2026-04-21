@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
+import { Stethoscope } from "lucide-react";
 import { QuotaStrip } from "@/components/QuotaStrip";
 import { SessionListPanel } from "@/components/SessionListPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -51,7 +52,17 @@ export function Dashboard() {
     <div className="flex h-screen flex-col bg-bg text-fg">
       <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-serif text-xl font-bold tracking-tight">ctm</h1>
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <Link
+            to="/doctor"
+            aria-label="Open doctor diagnostics"
+            title="Doctor"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
+          >
+            <Stethoscope size={16} aria-hidden />
+          </Link>
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="shrink-0">

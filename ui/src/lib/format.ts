@@ -58,3 +58,30 @@ export function shortenPath(p: string, maxSegments = 3): string {
   if (parts.length <= maxSegments) return p;
   return ".../" + parts.slice(-maxSegments).join("/");
 }
+
+/**
+ * Human-readable byte size. Binary units (1024-based) because ctm users
+ * are devs — "1 MB" here means 1 MiB. Picks the smallest unit that keeps
+ * the scaled value < 1024 so "1023 KB" never degrades to "0.9 MB".
+ *
+ *   0        → "0 B"
+ *   1024     → "1 KB"
+ *   1048576  → "1 MB"
+ *   1572864  → "1.5 MB"
+ */
+export function humanBytes(bytes: number): string {
+  if (!Number.isFinite(bytes)) return "—";
+  const abs = Math.abs(bytes);
+  if (abs < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB", "PB"];
+  let value = bytes / 1024;
+  let unitIdx = 0;
+  while (Math.abs(value) >= 1024 && unitIdx < units.length - 1) {
+    value /= 1024;
+    unitIdx++;
+  }
+  // Whole numbers render without a trailing ".0"; otherwise keep one
+  // decimal so "1.5 MB" stays readable.
+  const scaled = Number.isInteger(value) ? value.toString() : value.toFixed(1);
+  return `${scaled} ${units[unitIdx]}`;
+}

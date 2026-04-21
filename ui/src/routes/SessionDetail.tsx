@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import {
@@ -11,9 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FeedStream } from "@/components/FeedStream";
 import { CheckpointRow } from "@/components/CheckpointRow";
 import { RevertSheet } from "@/components/RevertSheet";
+import { DiffSheet } from "@/components/DiffSheet";
 import { HealthDot, healthState } from "@/components/HealthDot";
 import { AttentionLabel } from "@/components/AttentionLabel";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
+import { LogDiskUsage } from "@/components/LogDiskUsage";
 import { useSession, type Session } from "@/hooks/useSessions";
 import { useCheckpoints, type Checkpoint } from "@/hooks/useCheckpoints";
 import { relativeTime, shortenPath } from "@/lib/format";
@@ -129,7 +131,7 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
         </TabsList>
 
         <TabsContent value="feed" className="m-0 flex min-h-0 flex-1 flex-col">
-          <FeedStream sessionName={name} />
+          <FeedTab sessionName={name} />
         </TabsContent>
 
         <TabsContent
@@ -147,7 +149,12 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
               <Skeleton className="h-4 w-3/4" />
             </div>
           )}
-          {session && <MetaList session={session} />}
+          {session && (
+            <>
+              <MetaList session={session} />
+              <LogDiskUsage />
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </section>
@@ -176,9 +183,108 @@ function TabTrigger({
   );
 }
 
+type FeedFilter = "all" | "bash";
+
+const FEED_FILTER_STORAGE_PREFIX = "ctm.feed.filter.";
+
+function readStoredFilter(sessionName: string): FeedFilter {
+  if (typeof window === "undefined") return "all";
+  try {
+    const v = window.sessionStorage.getItem(
+      FEED_FILTER_STORAGE_PREFIX + sessionName,
+    );
+    return v === "bash" ? "bash" : "all";
+  } catch {
+    return "all";
+  }
+}
+
+/**
+ * V10 — Feed tab with an `All | Bash` segmented filter. Persists the
+ * selection in sessionStorage keyed by session name so refresh keeps
+ * the user's last view. Filtering is purely client-side off the
+ * existing feed cache; no backend change.
+ */
+function FeedTab({ sessionName }: { sessionName: string }) {
+  const [filter, setFilter] = useState<FeedFilter>(() =>
+    readStoredFilter(sessionName),
+  );
+
+  // Re-sync when the session changes (e.g. navigating between sessions
+  // in the desktop two-pane layout remounts might not happen).
+  useEffect(() => {
+    setFilter(readStoredFilter(sessionName));
+  }, [sessionName]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(
+        FEED_FILTER_STORAGE_PREFIX + sessionName,
+        filter,
+      );
+    } catch {
+      // sessionStorage disabled — fine, UI still works, selection is
+      // just not persisted across refreshes.
+    }
+  }, [filter, sessionName]);
+
+  return (
+    <>
+      <div
+        role="tablist"
+        aria-label="Feed filter"
+        className="flex shrink-0 gap-1 border-b border-border bg-bg px-4 py-2"
+      >
+        <FilterChip
+          active={filter === "all"}
+          onClick={() => setFilter("all")}
+          label="All"
+        />
+        <FilterChip
+          active={filter === "bash"}
+          onClick={() => setFilter("bash")}
+          label="Bash"
+        />
+      </div>
+      <FeedStream sessionName={sessionName} bashOnly={filter === "bash"} />
+    </>
+  );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-sm px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors",
+        active
+          ? "bg-surface-2 text-fg"
+          : "text-fg-muted hover:text-fg",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
 function CheckpointsTab({ sessionName }: { sessionName: string }) {
   const { data, isLoading, isError, error } = useCheckpoints(sessionName);
   const [selected, setSelected] = useState<Checkpoint | null>(null);
+  // V18: separate DiffSheet state so the diff viewer and the revert
+  // flow are fully independent — closing one must not affect the other.
+  const [diffTarget, setDiffTarget] = useState<Checkpoint | null>(null);
 
   return (
     <>
@@ -210,6 +316,7 @@ function CheckpointsTab({ sessionName }: { sessionName: string }) {
                 checkpoint={cp}
                 selected={selected?.sha === cp.sha}
                 onSelect={setSelected}
+                onViewDiff={setDiffTarget}
               />
             </li>
           ))}
@@ -219,6 +326,11 @@ function CheckpointsTab({ sessionName }: { sessionName: string }) {
         sessionName={sessionName}
         checkpoint={selected}
         onClose={() => setSelected(null)}
+      />
+      <DiffSheet
+        sessionName={sessionName}
+        checkpoint={diffTarget}
+        onClose={() => setDiffTarget(null)}
       />
     </>
   );

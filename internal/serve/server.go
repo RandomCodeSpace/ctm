@@ -86,6 +86,13 @@ type Options struct {
 	// attention engine's seven triggers. A zero-valued Thresholds falls
 	// back to attention.Defaults().
 	AttentionThresholds attention.Thresholds
+
+	// Config is the already-loaded user config, threaded through so
+	// the /api/doctor handler can report on required_env /
+	// required_in_path without re-reading from disk. Zero value is
+	// safe — the doctor runner treats unset fields as "not
+	// configured" rather than failing.
+	Config config.Config
 }
 
 // Server is the ctm serve HTTP daemon.
@@ -399,6 +406,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Authenticated JSON endpoints.
 	mux.Handle("GET /health", authHF(api.Health(s.opts.Version, ServeVersionHeader, s.startedAt, hubStatsAdapter{s.hub})))
 	mux.Handle("GET /api/bootstrap", authHF(api.Bootstrap(s.opts.Version, s.opts.Port, s.opts.WebhookURL != "")))
+	// Diagnostics (V20) — mirrors `ctm doctor` CLI over JSON. Handler
+	// enforces its own 5 s timeout on the runner so a pathological box
+	// can't hang the response.
+	mux.Handle("GET /api/doctor", authHF(api.Doctor(api.DefaultDoctorRunner(s.opts.Config))))
 
 	enricher := quotaEnricher{quota: s.quota, attention: s.attention}
 	mux.Handle("GET /api/sessions", authHF(api.List(s.proj, enricher)))
@@ -430,6 +441,11 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		return s.cpCache.IsCheckpoint(wd, name, sha)
 	}
 	mux.Handle("GET /api/sessions/{name}/checkpoints", authHF(api.Checkpoints(resolveWorkdir, s.cpCache)))
+	// V18 standalone diff viewer: unified diff for a single checkpoint
+	// SHA, guarded by the same 5 s cache + full-SHA allowlist as
+	// /revert. Response is text/plain so the UI can render it in a
+	// <pre> without JSON-envelope overhead.
+	mux.Handle("GET /api/sessions/{name}/checkpoints/{sha}/diff", authHF(api.Diff(resolveWorkdir, s.cpCache)))
 	mux.Handle("POST /api/sessions/{name}/revert", authHF(api.Revert(resolveWorkdir, allowedSHA)))
 	// Feed REST seed — parallel to /api/quota. Global ring and per-
 	// session variant; both emit tool_call payloads only. See
@@ -440,6 +456,11 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Hook intake from `proc.PostEvent` (Step 7); spawns / stops
 	// tailers as a side-effect of session_new / session_killed.
 	mux.Handle("POST /api/hooks/{event}", authHF(api.Hooks(s.tailers, s.hub)))
+
+	// V21 log disk usage. Walks the JSONL log dir and reports bytes per
+	// session + total so users can notice when it's time to prune.
+	// Read-only — no deletion verbs on this endpoint.
+	mux.Handle("GET /api/logs/usage", authHF(api.LogsUsage(s.logDir, logsUUIDResolver{proj: s.proj})))
 
 	// Debug: hub counters + subscriber count. Gated on auth; useful
 	// from curl to check whether publishes are flowing and whether
@@ -597,4 +618,44 @@ func (a quotaSourceAdapter) Snapshot() api.QuotaSnapshot {
 		FiveHourResetAt: s.FiveHourResetAt,
 		Known:           s.Known,
 	}
+}
+
+// logsUUIDResolver maps a log-file UUID to a human session name for
+// /api/logs/usage. It mirrors the orphan-adoption lookup done in
+// Server.Run: direct UUID match first, then the claudeDirToName fall-
+// back via ~/.claude/projects/*/<uuid>.jsonl so transcripts from
+// previous claude sessions in the same workdir still surface with
+// their tmux session name.
+type logsUUIDResolver struct{ proj *ingest.Projection }
+
+func (r logsUUIDResolver) ResolveUUID(uuid string) (string, bool) {
+	if r.proj == nil || uuid == "" {
+		return "", false
+	}
+	// Build the direct + workdir maps on every call. Projection.All()
+	// is RWMutex-guarded and copies defensively; the caller (handler)
+	// only fires on user-triggered refresh (TanStack 30 s staleTime),
+	// so the cost is negligible and we avoid stale caching for
+	// sessions that have been renamed.
+	all := r.proj.All()
+	for _, sess := range all {
+		if sess.UUID == uuid {
+			return sess.Name, true
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false
+	}
+	matches, _ := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", uuid+".jsonl"))
+	if len(matches) != 1 {
+		return "", false
+	}
+	dirName := filepath.Base(filepath.Dir(matches[0]))
+	for _, sess := range all {
+		if sess.Workdir != "" && strings.ReplaceAll(sess.Workdir, "/", "-") == dirName {
+			return sess.Name, true
+		}
+	}
+	return "", false
 }

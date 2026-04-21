@@ -52,6 +52,10 @@ the port, it exits non-zero without disturbing the foreign listener.`,
 			WebhookURL:  cfg.Serve.WebhookURL,
 			WebhookAuth: cfg.Serve.WebhookAuth,
 			AttentionThresholds: attentionThresholdsFrom(cfg.Serve.Attention),
+			// Thread the loaded config through so /api/doctor can
+			// surface required_env / required_in_path without re-
+			// reading from disk inside the handler.
+			Config: cfg,
 		}
 		// Let the config override the dump dir when set; otherwise
 		// serve.New falls back to /tmp/ctm-statusline.
