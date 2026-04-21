@@ -27,7 +27,13 @@ export function SessionCard({ session, active }: SessionCardProps) {
     tmux_alive: session.tmux_alive,
     last_tool_call_at: session.last_tool_call_at,
   });
-  const last = session.last_attached_at ?? session.created_at;
+  // Primary age display prefers live tool-call activity so the card's
+  // "last X" matches the list sort; falls back through last-attached
+  // and created-at when the engine hasn't seen a tool call yet.
+  const lastTC = session.last_tool_call_at;
+  const lastAttach = session.last_attached_at ?? session.created_at;
+  const primary = lastTC ?? lastAttach;
+  const primaryLabel = lastTC ? "last tool call" : "last attached";
 
   return (
     <Link
@@ -70,7 +76,24 @@ export function SessionCard({ session, active }: SessionCardProps) {
               {Math.round(session.context_pct)}%
             </span>
           )}
-          <time dateTime={last}>{relativeTime(last)}</time>
+          {lastTC && (
+            <time
+              dateTime={lastTC}
+              title={`last tool call ${lastTC}`}
+              className="font-mono tabular-nums text-fg"
+              aria-label="last tool call"
+            >
+              <span aria-hidden className="text-fg-muted">⏵</span>{" "}
+              {relativeTime(lastTC)}
+            </time>
+          )}
+          <time
+            dateTime={primary}
+            title={`${primaryLabel} ${primary}`}
+            className={cn(lastTC && "text-fg-muted")}
+          >
+            {lastTC ? relativeTime(lastAttach) : relativeTime(primary)}
+          </time>
         </div>
       </div>
 
