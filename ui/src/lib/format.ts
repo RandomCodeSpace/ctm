@@ -14,6 +14,22 @@ export function stripAnsi(s: string): string {
 export function relativeTime(iso: string | Date, now: Date = new Date()): string {
   const then = typeof iso === "string" ? new Date(iso) : iso;
   const seconds = Math.max(0, Math.round((now.getTime() - then.getTime()) / 1000));
+  return formatCoarseDuration(seconds);
+}
+
+/**
+ * Same coarse-duration formatter as `relativeTime`, but counts forward
+ * to a future timestamp: "in 3 hr". Used for things like quota reset
+ * timers where `iso` is in the future; relativeTime would clamp those
+ * to "0 sec" because it measures how long *ago* the timestamp was.
+ */
+export function relativeFuture(iso: string | Date, now: Date = new Date()): string {
+  const then = typeof iso === "string" ? new Date(iso) : iso;
+  const seconds = Math.max(0, Math.round((then.getTime() - now.getTime()) / 1000));
+  return formatCoarseDuration(seconds);
+}
+
+function formatCoarseDuration(seconds: number): string {
   if (seconds < 60) return `${seconds} sec`;
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes} min`;

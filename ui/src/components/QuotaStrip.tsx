@@ -1,5 +1,5 @@
 import { useQuota } from "@/hooks/useQuota";
-import { relativeTime } from "@/lib/format";
+import { relativeFuture } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface BarProps {
@@ -50,7 +50,7 @@ function QuotaBar({ pct, resetAt, label }: BarProps) {
           className="hidden shrink-0 text-xs text-fg-dim md:inline"
           title={`Resets at ${resetAt}`}
         >
-          resets in {relativeTime(resetAt)}
+          resets in {relativeFuture(resetAt)}
         </span>
       )}
     </div>
