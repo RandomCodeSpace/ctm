@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import type { Session } from "@/hooks/useSessions";
+import { isStale, type Session } from "@/hooks/useSessions";
 import { HealthDot, healthState } from "@/components/HealthDot";
 import { AttentionLabel } from "@/components/AttentionLabel";
 import { compactNumber, relativeTime, shortenPath } from "@/lib/format";
@@ -53,14 +53,25 @@ export function SessionCard({ session, active }: SessionCardProps) {
           <HealthDot state={state} />
           <span className="truncate font-medium text-fg">{session.name}</span>
         </div>
-        <span
-          className={cn(
-            "shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em]",
-            session.mode === "yolo" ? "text-mode-yolo" : "text-mode-safe",
+        <div className="flex shrink-0 items-center gap-2">
+          {isStale(session) && (
+            <span
+              className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-gold/80"
+              title="No tool call in > 30 min"
+              aria-label="stale session"
+            >
+              stale
+            </span>
           )}
-        >
-          {session.mode}
-        </span>
+          <span
+            className={cn(
+              "text-[10px] font-semibold uppercase tracking-[0.18em]",
+              session.mode === "yolo" ? "text-mode-yolo" : "text-mode-safe",
+            )}
+          >
+            {session.mode}
+          </span>
+        </div>
       </div>
 
       <div className="mt-1 flex items-center justify-between gap-3 text-xs">

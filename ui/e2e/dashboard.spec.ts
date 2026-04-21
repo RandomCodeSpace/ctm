@@ -26,4 +26,28 @@ test.describe("Dashboard", () => {
     // ⏵ glyph rendered for the tool-call badge.
     await expect(card.locator('time[aria-label="last tool call"]')).toBeVisible();
   });
+
+  test("renders the stale chip when tool call is older than 30 min", async ({
+    page,
+  }) => {
+    const oldTC = new Date(Date.now() - 45 * 60_000).toISOString();
+    await installMocks(page, {
+      sessions: [
+        {
+          name: "dormant",
+          uuid: "00000000-0000-0000-0000-00000000dead",
+          mode: "safe",
+          workdir: "/home/dev/projects/ctm",
+          created_at: "2026-04-21T10:00:00Z",
+          last_attached_at: "2026-04-21T11:00:00Z",
+          last_tool_call_at: oldTC,
+          is_active: true,
+          tmux_alive: true,
+        },
+      ],
+    });
+    await page.goto("/");
+    const card = page.getByRole("link", { name: /dormant/i }).first();
+    await expect(card.getByLabel("stale session")).toBeVisible();
+  });
 });

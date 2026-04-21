@@ -76,6 +76,19 @@ export function attentionSeverity(a: Attention | undefined): number {
   return SEVERITY[a.state] ?? 5;
 }
 
+/** A session is "stale" when it's been alive but inactive for longer
+ * than this. Frontend-only constant; if we later want per-install
+ * tuning, thread through /api/bootstrap. */
+export const STALE_THRESHOLD_MS = 30 * 60 * 1000;
+
+/** True when the session's tmux is alive but no tool call has landed
+ * within STALE_THRESHOLD_MS. Used by the StaleChip on SessionCard. */
+export function isStale(s: Session, nowMs: number = Date.now()): boolean {
+  if (!s.tmux_alive) return false;
+  if (!s.last_tool_call_at) return false;
+  return nowMs - Date.parse(s.last_tool_call_at) > STALE_THRESHOLD_MS;
+}
+
 /** Most-recent activity timestamp for sort: prefer last tool call, fall
  * back to last_attached_at, then created_at. */
 function activityMs(s: Session): number {

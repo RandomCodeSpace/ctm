@@ -98,4 +98,29 @@ describe("SessionCard", () => {
     );
     expect(screen.getByRole("link")).toHaveAttribute("aria-current", "page");
   });
+
+  it("shows the stale chip when tool call is older than the threshold", () => {
+    // 45 min old tool call with live tmux → stale.
+    renderCard(
+      makeSession({
+        last_tool_call_at: new Date(Date.now() - 45 * 60_000).toISOString(),
+      }),
+    );
+    expect(screen.getByLabelText("stale session")).toBeInTheDocument();
+  });
+
+  it("hides the stale chip when tmux is dead (attention takes over)", () => {
+    renderCard(
+      makeSession({
+        tmux_alive: false,
+        last_tool_call_at: new Date(Date.now() - 45 * 60_000).toISOString(),
+      }),
+    );
+    expect(screen.queryByLabelText("stale session")).not.toBeInTheDocument();
+  });
+
+  it("hides the stale chip when tool call is recent", () => {
+    renderCard(makeSession()); // default has a 5 s old tool call
+    expect(screen.queryByLabelText("stale session")).not.toBeInTheDocument();
+  });
 });
