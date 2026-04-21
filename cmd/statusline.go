@@ -49,7 +49,11 @@ var statuslineCmd = &cobra.Command{
 // statuslineInput is the subset of claude's statusLine payload we render.
 // Pointer fields let us distinguish "field absent" from "field is 0".
 type statuslineInput struct {
-	Model struct {
+	// SessionID is Claude's session UUID, used as the {uuid} substitution
+	// in CTM_STATUSLINE_DUMP so ctm serve can ingest per-session quota
+	// without needing tmux env plumbing.
+	SessionID string `json:"session_id"`
+	Model     struct {
 		DisplayName string `json:"display_name"`
 		ID          string `json:"id"`
 	} `json:"model"`
@@ -83,16 +87,35 @@ func runStatusline(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Diagnostic: if CTM_STATUSLINE_DUMP points at a file path, write
-	// the raw payload there before parsing. Useful for debugging a
-	// render that doesn't match expectations — the user can grab the
-	// exact bytes Claude Code sent and share them.
+	// Parse early so the `{uuid}` substitution below has a session ID to
+	// work with. Unmarshal failures fall back silently to the legacy
+	// no-template behavior so a malformed payload never blocks rendering.
+	var in statuslineInput
+	parseErr := json.Unmarshal(data, &in)
+
+	// CTM_STATUSLINE_DUMP supports a `{uuid}` template that ctm serve's
+	// quota ingest watches for. With the template, each redraw writes
+	// `<dir>/<sanitized-uuid>.json` (one file per session). Without the
+	// template (legacy behavior), it writes a single global file —
+	// global rate limits still work, per-session context % does not.
 	if dump := os.Getenv("CTM_STATUSLINE_DUMP"); dump != "" {
-		_ = os.WriteFile(dump, data, 0600)
+		path := dump
+		if strings.Contains(path, "{uuid}") {
+			uuid := "unknown"
+			if parseErr == nil && in.SessionID != "" {
+				uuid = sanitizeSessionID(in.SessionID)
+			}
+			path = strings.ReplaceAll(path, "{uuid}", uuid)
+		}
+		// Ensure the parent dir exists (the templated default
+		// `/tmp/ctm-statusline/{uuid}.json` typically requires this).
+		if dir := filepath.Dir(path); dir != "" && dir != "." {
+			_ = os.MkdirAll(dir, 0o700)
+		}
+		_ = os.WriteFile(path, data, 0o600)
 	}
 
-	var in statuslineInput
-	if err := json.Unmarshal(data, &in); err != nil {
+	if parseErr != nil {
 		return nil
 	}
 	rendered := renderStatusline(&in)

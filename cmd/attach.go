@@ -10,6 +10,7 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/health"
 	"github.com/RandomCodeSpace/ctm/internal/output"
+	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
@@ -43,6 +44,10 @@ func runAttach(cmd *cobra.Command, args []string) error {
 	if err := session.ValidateName(name); err != nil {
 		return err
 	}
+
+	// Bring up ctm serve in the background (no-op if already running).
+	// Best-effort — never blocks the attach flow.
+	proc.EnsureServeRunning(cmd.Context())
 
 	out := output.Stderr()
 	cfgPtr, err := ensureSetup()
@@ -90,6 +95,8 @@ func createAndAttach(name, workdir, mode string, store *session.Store, tc *tmux.
 
 	out.Success("created session %q", name)
 	fireHook("on_new", sess)
+	fireServeEvent("session_new", sess)
+	fireServeEvent("session_attached", sess)
 	return tc.Go(name)
 }
 
@@ -143,6 +150,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 			out.Warn("could not update attached timestamp: %v", err)
 		}
 		fireHook("on_attach", sess)
+		fireServeEvent("session_attached", sess)
 		if err := tc.Go(sess.Name); err != nil {
 			return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
 		}
@@ -166,6 +174,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 			out.Warn("could not update attached timestamp: %v", err)
 		}
 		fireHook("on_attach", sess)
+		fireServeEvent("session_attached", sess)
 		if err := tc.Go(sess.Name); err != nil {
 			return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
 		}
@@ -182,6 +191,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 	}
 
 	fireHook("on_attach", sess)
+	fireServeEvent("session_attached", sess)
 	if err := tc.Go(sess.Name); err != nil {
 		return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
 	}

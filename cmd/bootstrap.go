@@ -10,6 +10,7 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/logrotate"
 	"github.com/RandomCodeSpace/ctm/internal/migrate"
+	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/shell"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -48,8 +49,20 @@ func ensureSetup() (*config.Config, error) {
 	_ = ensureClaudeRemoteControlDefault()
 	_ = ensureClaudeTUIFullscreenDefault()
 	_ = ensureClaudeViewModeFocusDefault()
+	_ = ensureServeToken()
 	_ = pruneSessionLogs(cfg)
 	return &cfg, nil
+}
+
+// ensureServeToken seeds ~/.config/ctm/serve.token (mode 0600) on first
+// run so the auth-protected `ctm serve` daemon has a stable bearer to
+// validate against. Idempotent: existing tokens are read and returned
+// unchanged. Errors are swallowed in line with the rest of ensureSetup
+// — token absence will surface as a clear startup error from
+// `ctm serve` itself.
+func ensureServeToken() error {
+	_, err := auth.EnsureToken(auth.TokenPath())
+	return err
 }
 
 // pruneSessionLogs walks the session log directory and applies the

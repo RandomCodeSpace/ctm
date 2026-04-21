@@ -12,6 +12,7 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/output"
 	"github.com/RandomCodeSpace/ctm/internal/prompt"
+	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/shell"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -61,6 +62,7 @@ var safeCmd = &cobra.Command{
 }
 
 func runYolo(cmd *cobra.Command, args []string) error {
+	proc.EnsureServeRunning(cmd.Context())
 	out := output.Stdout()
 	cfgPtr, err := ensureSetup()
 	if err != nil {
@@ -116,7 +118,11 @@ func runYolo(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Magenta(">>> YOLO MODE")
-	fireHook("on_yolo", yoloIntent(store, name, workdir, "yolo"))
+	{
+		intent := yoloIntent(store, name, workdir, "yolo")
+		fireHook("on_yolo", intent)
+		fireServeEvent("on_yolo", intent)
+	}
 
 	// If session exists and mode matches → preflight. preflight handles both
 	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
@@ -144,6 +150,7 @@ func runYolo(cmd *cobra.Command, args []string) error {
 }
 
 func runYoloBang(cmd *cobra.Command, args []string) error {
+	proc.EnsureServeRunning(cmd.Context())
 	out := output.Stdout()
 	cfgPtr, err := ensureSetup()
 	if err != nil {
@@ -173,7 +180,11 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Magenta(">>> YOLO MODE")
-	fireHook("on_yolo", yoloIntent(store, name, workdir, "yolo"))
+	{
+		intent := yoloIntent(store, name, workdir, "yolo")
+		fireHook("on_yolo", intent)
+		fireServeEvent("on_yolo", intent)
+	}
 
 	if tc.HasSession(name) {
 		if err := tc.KillSession(name); err != nil {
@@ -189,6 +200,7 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 }
 
 func runSafe(cmd *cobra.Command, args []string) error {
+	proc.EnsureServeRunning(cmd.Context())
 	out := output.Stdout()
 	cfgPtr, err := ensureSetup()
 	if err != nil {
@@ -214,7 +226,13 @@ func runSafe(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Success(">>> SAFE MODE")
-	fireHook("on_safe", yoloIntent(store, name, workdir, "safe"))
+	{
+		intent := yoloIntent(store, name, workdir, "safe")
+		fireHook("on_safe", intent)
+		// Map "on_safe" to a serve session_attached — the hub doesn't
+		// model safe-mode separately, only the lifecycle transition.
+		fireServeEvent("session_attached", intent)
+	}
 
 	// If session exists and mode matches → preflight. preflight handles both
 	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),

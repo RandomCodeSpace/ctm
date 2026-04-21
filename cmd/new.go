@@ -9,6 +9,7 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/output"
 	"github.com/RandomCodeSpace/ctm/internal/prompt"
+	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/shell"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -27,6 +28,8 @@ var newCmd = &cobra.Command{
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
+	proc.EnsureServeRunning(cmd.Context())
+
 	out := output.Stderr()
 	cfgPtr, err := ensureSetup()
 	if err != nil {

@@ -45,6 +45,7 @@ func runKill(cmd *cobra.Command, args []string) error {
 	// Fire the hook BEFORE tearing down so the script can see the
 	// session as still live (take a transcript snapshot, notify, …).
 	fireHook("on_kill", sess)
+	fireServeEvent("session_killed", sess)
 
 	if tc.HasSession(name) {
 		if err := tc.KillSession(name); err != nil {
@@ -78,6 +79,7 @@ func runKillAll(cmd *cobra.Command, args []string) error {
 	// Fire on_kill for each session while they still exist on disk.
 	for _, s := range sessions {
 		fireHook("on_kill", s)
+		fireServeEvent("session_killed", s)
 	}
 
 	if err := tc.KillServer(); err != nil {

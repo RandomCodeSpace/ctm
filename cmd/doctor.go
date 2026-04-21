@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/output"
+	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
@@ -28,6 +30,13 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	out.Bold("=== ctm doctor ===")
 	fmt.Println()
+
+	// Idempotently seed config.json, sessions.json, tmux.conf, and
+	// serve.token. Safe on every invocation; this is the documented
+	// remediation path when `ctm serve` reports a missing token.
+	if _, err := ensureSetup(); err != nil {
+		out.Warn("setup seeding failed: %v", err)
+	}
 
 	// --- Dependencies ---
 	out.Bold("Dependencies:")
@@ -61,6 +70,21 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		out.Info("  health_check_timeout_sec:   %d", cfg.HealthCheckTimeoutSec)
 		out.Info("  required_env:               %s", strings.Join(cfg.RequiredEnv, ", "))
 		out.Info("  required_in_path:           %s", strings.Join(cfg.RequiredInPath, ", "))
+	}
+	fmt.Println()
+
+	// --- Serve token ---
+	tokenPath := auth.TokenPath()
+	out.Bold("Serve token: %s", tokenPath)
+	if info, err := os.Stat(tokenPath); err != nil {
+		out.Warn("  missing — `ctm serve` will refuse to bind")
+	} else {
+		mode := info.Mode().Perm()
+		if mode != 0o600 {
+			out.Warn("  present but mode is %o (want 0600) — will refuse on strict checks", mode)
+		} else {
+			out.Success("  present (mode 0600, %d bytes)", info.Size())
+		}
 	}
 	fmt.Println()
 

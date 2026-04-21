@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+/* Self-hosted fonts (no public CDN at runtime). */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/playfair-display/400.css";
+@import "@fontsource/playfair-display/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+/* Dark by default. Override via [data-theme="light"] on <html>. */
+:root {
+  --bg: #0a0a0a;
+  --surface: #0f0f0f;
+  --surface-2: #15151a;
+  --border: #1a1a1a;
+  --fg: #f5f5f0;
+  --fg-muted: #a1a187;
+  --fg-dim: #8c8c7a;
+  --accent-gold: #c9b878;
+  --mode-yolo: var(--accent-gold);
+  --mode-safe: #a1a187;
+  --alert-ember: #c75a4a;
+  --live-dot: #86efac;
+
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /*
+   * shadcn/radix shim tokens — map shadcn's generic palette onto our FWD
+   * design tokens so dropped-in primitives (Sheet, Tabs, Dialog, Button,
+   * Card, Skeleton) inherit the editorial look without per-instance
+   * className surgery.
+   */
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--surface);
+  --popover-foreground: var(--fg);
+  --primary: var(--accent-gold);
+  --primary-foreground: var(--bg);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--fg);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--fg);
+  --destructive: var(--alert-ember);
+  --destructive-foreground: var(--fg);
+  --input: var(--border);
+  --ring: var(--accent-gold);
+  --radius: 0.25rem;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #fafaf7;
+  --surface: #ffffff;
+  --surface-2: #f3f3f0;
+  --border: #ececea;
+  --fg: #191919;
+  --fg-muted: #4a4a44;
+  --fg-dim: #6b6b62;
+  --accent-gold: #7a6a3a;
+  --mode-safe: #4a4a44;
+  --alert-ember: #a14238;
+  --live-dot: #15803d;
+
+  color-scheme: light;
+}
+
+/*
+ * Tailwind v4 CSS-first config: tokens registered as theme variables
+ * become utility classes (bg-bg, text-fg, border-border, etc.) and
+ * resolve at the cascade — theme switches work without a JS tree walk.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-dim: var(--fg-dim);
+  --color-accent-gold: var(--accent-gold);
+  --color-mode-yolo: var(--mode-yolo);
+  --color-mode-safe: var(--mode-safe);
+  --color-alert-ember: var(--alert-ember);
+  --color-live-dot: var(--live-dot);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Base. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  border-color: var(--border);
+}
+
+/*
+ * Honour prefers-reduced-motion — disable all transitions/animations app-wide.
+ * Spec §3 (Motion) and ui rules (banned: gimmicky motion).
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible focus everywhere. */
+:focus-visible {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/*
+ * Subtle 100ms fade for SSE-injected feed rows. Disabled automatically
+ * by the prefers-reduced-motion block above.
+ */
+@keyframes ctm-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ctm-row-in {
+  animation: ctm-row-in 100ms ease-out;
+}

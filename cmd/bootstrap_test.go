@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/RandomCodeSpace/ctm/internal/config"
+	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 )
 
 // withTempHome redirects HOME to a fresh temp dir for the duration of t.
@@ -37,6 +38,7 @@ func TestEnsureSetupCreatesAllArtifacts(t *testing.T) {
 		config.TmuxConfPath(),
 		config.ClaudeOverlayPath(),
 		config.EnvFilePath(),
+		auth.TokenPath(),
 	}
 	for _, p := range wantFiles {
 		if _, err := os.Stat(p); err != nil {
