@@ -123,4 +123,31 @@ describe("SessionCard", () => {
     renderCard(makeSession()); // default has a 5 s old tool call
     expect(screen.queryByLabelText("stale session")).not.toBeInTheDocument();
   });
+
+  it("renders the per-session context bar at gold for 80%", () => {
+    renderCard(makeSession({ context_pct: 80 }));
+    const bar = screen.getByRole("progressbar", { name: /context/i });
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveAttribute("aria-valuenow", "80");
+    // Inner fill carries the colour class.
+    const fill = bar.firstElementChild as HTMLElement | null;
+    expect(fill).not.toBeNull();
+    expect(fill!.className).toContain("bg-accent-gold");
+    expect(fill!.style.width).toBe("80%");
+  });
+
+  it("renders the per-session context bar at ember for 95%", () => {
+    renderCard(makeSession({ context_pct: 95 }));
+    const bar = screen.getByRole("progressbar", { name: /context/i });
+    expect(bar).toHaveAttribute("aria-valuenow", "95");
+    const fill = bar.firstElementChild as HTMLElement | null;
+    expect(fill!.className).toContain("bg-alert-ember");
+  });
+
+  it("hides the per-session context bar when context_pct is undefined", () => {
+    renderCard(makeSession({ context_pct: undefined }));
+    expect(
+      screen.queryByRole("progressbar", { name: /context/i }),
+    ).not.toBeInTheDocument();
+  });
 });

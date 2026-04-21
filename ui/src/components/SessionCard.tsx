@@ -3,6 +3,7 @@ import { isStale, type Session } from "@/hooks/useSessions";
 import { HealthDot, healthState } from "@/components/HealthDot";
 import { AttentionLabel } from "@/components/AttentionLabel";
 import { compactNumber, relativeTime, shortenPath } from "@/lib/format";
+import { pctColor } from "@/lib/quota";
 import { cn } from "@/lib/utils";
 
 interface SessionCardProps {
@@ -34,6 +35,10 @@ export function SessionCard({ session, active }: SessionCardProps) {
   const lastAttach = session.last_attached_at ?? session.created_at;
   const primary = lastTC ?? lastAttach;
   const primaryLabel = lastTC ? "last tool call" : "last attached";
+  const hasCtx = typeof session.context_pct === "number";
+  const ctxPct = hasCtx
+    ? Math.max(0, Math.min(100, session.context_pct as number))
+    : 0;
 
   return (
     <Link
@@ -41,13 +46,28 @@ export function SessionCard({ session, active }: SessionCardProps) {
       aria-current={active ? "page" : undefined}
       data-attentive={attentive || undefined}
       className={cn(
-        "group block border-l-[3px] border-transparent bg-surface px-4 py-3",
+        "group relative block border-l-[3px] border-transparent bg-surface px-4 py-3",
         "border-b border-b-border",
         "transition-colors hover:bg-surface-2",
         attentive && "border-l-alert-ember",
         active && "bg-surface-2",
       )}
     >
+      {hasCtx && (
+        <div
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={ctxPct}
+          aria-label={`${session.name} context window`}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-transparent"
+        >
+          <div
+            className={cn("h-full transition-all", pctColor(ctxPct))}
+            style={{ width: `${ctxPct}%` }}
+          />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <HealthDot state={state} />

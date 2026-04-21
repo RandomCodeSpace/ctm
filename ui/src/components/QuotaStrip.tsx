@@ -1,17 +1,12 @@
 import { useQuota } from "@/hooks/useQuota";
 import { relativeFuture } from "@/lib/format";
+import { pctColor } from "@/lib/quota";
 import { cn } from "@/lib/utils";
 
 interface BarProps {
   pct?: number;
   resetAt?: string;
   label: string;
-}
-
-function pctColor(pct: number): string {
-  if (pct >= 90) return "bg-alert-ember";
-  if (pct >= 75) return "bg-accent-gold";
-  return "bg-fg-muted";
 }
 
 function QuotaBar({ pct, resetAt, label }: BarProps) {
