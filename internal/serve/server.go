@@ -462,6 +462,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Read-only — no deletion verbs on this endpoint.
 	mux.Handle("GET /api/logs/usage", authHF(api.LogsUsage(s.logDir, logsUUIDResolver{proj: s.proj})))
 
+	// V19 full-text search (slice 1): grep over *.jsonl under logDir.
+	// Slice 2 (UI bar) consumes this; slice 3 (FTS5) is deferred to v0.3.
+	mux.Handle("GET /api/search", authHF(api.Search(s.logDir, logsUUIDResolver{proj: s.proj})))
+
 	// Debug: hub counters + subscriber count. Gated on auth; useful
 	// from curl to check whether publishes are flowing and whether
 	// the browser is actually subscribed.
