@@ -21,9 +21,11 @@ import (
 
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/serve/api"
+	"github.com/RandomCodeSpace/ctm/internal/serve/attention"
 	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 	"github.com/RandomCodeSpace/ctm/internal/serve/events"
 	"github.com/RandomCodeSpace/ctm/internal/serve/ingest"
+	"github.com/RandomCodeSpace/ctm/internal/serve/webhook"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
 
@@ -72,9 +74,18 @@ type Options struct {
 	// means /tmp/ctm-statusline (per design spec §4 default).
 	StatuslineDumpDir string
 
-	// HasWebhook is surfaced in /api/bootstrap response. Wired up in a
-	// later step; defaults false.
-	HasWebhook bool
+	// WebhookURL enables the webhook dispatcher. Empty → disabled.
+	// HasWebhook in /api/bootstrap is derived from this.
+	WebhookURL string
+
+	// WebhookAuth, if non-empty, is sent verbatim in the Authorization
+	// header on each POST (e.g. "Bearer abc123").
+	WebhookAuth string
+
+	// AttentionThresholds overrides the built-in defaults for the
+	// attention engine's seven triggers. A zero-valued Thresholds falls
+	// back to attention.Defaults().
+	AttentionThresholds attention.Thresholds
 }
 
 // Server is the ctm serve HTTP daemon.
@@ -91,12 +102,15 @@ type Server struct {
 	requestCtx    context.Context
 	requestCancel context.CancelFunc
 
-	token   string
-	hub     *events.Hub
-	proj    *ingest.Projection
-	tailers *ingest.TailerManager
-	quota   *ingest.QuotaIngester
-	logDir  string
+	token     string
+	hub       *events.Hub
+	proj      *ingest.Projection
+	tailers   *ingest.TailerManager
+	quota     *ingest.QuotaIngester
+	cpCache   *api.CheckpointsCache
+	attention *attention.Engine
+	webhook   *webhook.Dispatcher
+	logDir    string
 }
 
 // New binds the listener, loads the bearer token, constructs the hub
@@ -149,6 +163,40 @@ func New(opts Options) (*Server, error) {
 
 	hub := events.NewHub(0)
 	proj := ingest.New(sessionsPath, tmux.NewClient(tmuxConf))
+	quota := ingest.NewQuotaIngester(dumpDir, proj, hub)
+	cpCache := api.NewCheckpointsCache()
+
+	// Attention engine: subscribes to hub, evaluates the seven triggers,
+	// re-publishes attention_raised/_cleared on transitions. Wired into
+	// quotaEnricher.Attention so /api/sessions surfaces the current
+	// alert. Runs for the full daemon lifetime.
+	thr := opts.AttentionThresholds
+	if thr == (attention.Thresholds{}) {
+		thr = attention.Defaults()
+	}
+	attEngine := attention.NewEngine(
+		hub,
+		quota,
+		sessionSourceAdapter{proj: proj, cpCache: cpCache},
+		thr,
+		nil,
+	)
+
+	// Webhook dispatcher: POSTs attention_raised events to a user-
+	// configured URL with 3× exponential retry and 60 s debounce per
+	// (session, alert). URL empty → Run returns immediately without
+	// subscribing (dispatcher disabled).
+	disp := webhook.NewDispatcher(
+		hub,
+		sessionResolverAdapter{proj: proj},
+		webhook.Config{
+			URL:        opts.WebhookURL,
+			AuthHeader: opts.WebhookAuth,
+			UIBaseURL:  fmt.Sprintf("http://127.0.0.1:%d", opts.Port),
+		},
+		nil,
+	)
+
 	reqCtx, reqCancel := context.WithCancel(context.Background())
 	s := &Server{
 		opts:          opts,
@@ -160,7 +208,10 @@ func New(opts Options) (*Server, error) {
 		hub:           hub,
 		proj:          proj,
 		tailers:       ingest.NewTailerManager(logDir, hub),
-		quota:         ingest.NewQuotaIngester(dumpDir, proj, hub),
+		quota:         quota,
+		cpCache:       cpCache,
+		attention:     attEngine,
+		webhook:       disp,
 		logDir:        logDir,
 	}
 
@@ -200,6 +251,16 @@ func (s *Server) Run(ctx context.Context) error {
 	defer quotaCancel()
 	quotaDone := make(chan error, 1)
 	go func() { quotaDone <- s.quota.Run(quotaCtx) }()
+
+	attCtx, attCancel := context.WithCancel(ctx)
+	defer attCancel()
+	attDone := make(chan error, 1)
+	go func() { attDone <- s.attention.Run(attCtx) }()
+
+	whCtx, whCancel := context.WithCancel(ctx)
+	defer whCancel()
+	whDone := make(chan error, 1)
+	go func() { whDone <- s.webhook.Run(whCtx) }()
 
 	// Tailer adoption: scan the JSONL log directory and spawn a tailer
 	// for every UUID we find a log file for. The log files are the
@@ -285,6 +346,10 @@ func (s *Server) Run(ctx context.Context) error {
 		<-projDone
 		quotaCancel()
 		<-quotaDone
+		attCancel()
+		<-attDone
+		whCancel()
+		<-whDone
 		s.tailers.StopAll()
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
@@ -304,6 +369,10 @@ func (s *Server) Run(ctx context.Context) error {
 		<-projDone
 		quotaCancel()
 		<-quotaDone
+		attCancel()
+		<-attDone
+		whCancel()
+		<-whDone
 		s.tailers.StopAll()
 		err := <-serveDone
 		if shutErr != nil {
@@ -329,9 +398,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// Authenticated JSON endpoints.
 	mux.Handle("GET /health", authHF(api.Health(s.opts.Version, ServeVersionHeader, s.startedAt, hubStatsAdapter{s.hub})))
-	mux.Handle("GET /api/bootstrap", authHF(api.Bootstrap(s.opts.Version, s.opts.Port, s.opts.HasWebhook)))
+	mux.Handle("GET /api/bootstrap", authHF(api.Bootstrap(s.opts.Version, s.opts.Port, s.opts.WebhookURL != "")))
 
-	enricher := quotaEnricher{quota: s.quota}
+	enricher := quotaEnricher{quota: s.quota, attention: s.attention}
 	mux.Handle("GET /api/sessions", authHF(api.List(s.proj, enricher)))
 	mux.Handle("GET /api/sessions/{name}", authHF(api.Get(s.proj, enricher)))
 	// Quota REST fallback so global rate-limit bars render on first
@@ -349,8 +418,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Shared 5 s checkpoint cache: the /checkpoints handler and the
 	// revert SHA-allowlist check both read through the same cache,
 	// preventing a rapid-revert client from spinning up unbounded
-	// `git log` subprocesses.
-	cpCache := api.NewCheckpointsCache()
+	// `git log` subprocesses. Also consumed by the attention engine
+	// (trigger G yolo_unchecked).
 	allowedSHA := func(name, sha string) bool {
 		wd, ok := resolveWorkdir(name)
 		if !ok {
@@ -358,9 +427,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		}
 		// Full SHA equality only; abbreviated SHAs are intentionally
 		// rejected (see api.CheckpointsCache.IsCheckpoint comment).
-		return cpCache.IsCheckpoint(wd, name, sha)
+		return s.cpCache.IsCheckpoint(wd, name, sha)
 	}
-	mux.Handle("GET /api/sessions/{name}/checkpoints", authHF(api.Checkpoints(resolveWorkdir, cpCache)))
+	mux.Handle("GET /api/sessions/{name}/checkpoints", authHF(api.Checkpoints(resolveWorkdir, s.cpCache)))
 	mux.Handle("POST /api/sessions/{name}/revert", authHF(api.Revert(resolveWorkdir, allowedSHA)))
 	// Feed REST seed — parallel to /api/quota. Global ring and per-
 	// session variant; both emit tool_call payloads only. See
@@ -399,11 +468,13 @@ type hubStatsAdapter struct{ hub *events.Hub }
 func (a hubStatsAdapter) Stats() any { return a.hub.Stats() }
 
 // quotaEnricher adapts the QuotaIngester (in `internal/serve/ingest`)
-// to the api.SessionEnricher interface so per-session `context_pct`
-// shows up on /api/sessions responses without coupling the ingest
-// package to the api package.
+// and the attention engine to the api.SessionEnricher interface so
+// per-session `context_pct`, tokens, and current attention alert show
+// up on /api/sessions responses without coupling the api package to
+// ingest or attention internals.
 type quotaEnricher struct {
-	quota *ingest.QuotaIngester
+	quota     *ingest.QuotaIngester
+	attention *attention.Engine
 }
 
 func (e quotaEnricher) ContextPct(name string) (int, bool) {
@@ -418,7 +489,18 @@ func (e quotaEnricher) LastToolCallAt(name string) (time.Time, bool) {
 }
 
 func (e quotaEnricher) Attention(name string) (api.Attention, bool) {
-	return api.Attention{}, false
+	if e.attention == nil {
+		return api.Attention{}, false
+	}
+	snap, ok := e.attention.Snapshot(name)
+	if !ok {
+		return api.Attention{}, false
+	}
+	return api.Attention{
+		State:   snap.State,
+		Since:   snap.Since,
+		Details: snap.Details,
+	}, true
 }
 
 func (e quotaEnricher) Tokens(name string) (api.TokenUsage, bool) {
@@ -434,6 +516,65 @@ func (e quotaEnricher) Tokens(name string) (api.TokenUsage, bool) {
 		OutputTokens: s.OutputTokens,
 		CacheTokens:  s.CacheTokens,
 	}, true
+}
+
+// sessionSourceAdapter satisfies attention.SessionSource by reading
+// through the live projection and the checkpoint cache. Projection
+// already owns its own tmux client for TmuxAlive; checkpoint freshness
+// (for trigger G) comes from a bounded-limit cache Get that avoids
+// unbounded `git log` calls per tick.
+type sessionSourceAdapter struct {
+	proj    *ingest.Projection
+	cpCache *api.CheckpointsCache
+}
+
+func (a sessionSourceAdapter) Names() []string {
+	all := a.proj.All()
+	out := make([]string, 0, len(all))
+	for _, s := range all {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
+func (a sessionSourceAdapter) Mode(name string) string {
+	s, ok := a.proj.Get(name)
+	if !ok {
+		return ""
+	}
+	return s.Mode
+}
+
+func (a sessionSourceAdapter) TmuxAlive(name string) bool {
+	return a.proj.TmuxAlive(name)
+}
+
+func (a sessionSourceAdapter) LastCheckpointAt(name string) (time.Time, bool) {
+	s, ok := a.proj.Get(name)
+	if !ok || s.Workdir == "" {
+		return time.Time{}, false
+	}
+	cps, err := a.cpCache.Get(s.Workdir, name, 1)
+	if err != nil || len(cps) == 0 {
+		return time.Time{}, false
+	}
+	t, perr := time.Parse(time.RFC3339, cps[0].TS)
+	if perr != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// sessionResolverAdapter satisfies webhook.SessionResolver so webhook
+// payloads carry session_uuid / workdir / mode alongside the alert.
+type sessionResolverAdapter struct{ proj *ingest.Projection }
+
+func (a sessionResolverAdapter) Resolve(name string) (uuid, workdir, mode string, ok bool) {
+	s, found := a.proj.Get(name)
+	if !found {
+		return "", "", "", false
+	}
+	return s.UUID, s.Workdir, s.Mode, true
 }
 
 // quotaSourceAdapter wraps the ingester's GlobalSnapshot return into
