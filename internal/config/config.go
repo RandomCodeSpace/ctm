@@ -49,6 +49,35 @@ type Config struct {
 	// HookTimeoutSec is the per-hook wall-clock ceiling. Zero → default
 	// (5 s). Set a very large number to effectively disable the cap.
 	HookTimeoutSec int `json:"hook_timeout_seconds"`
+
+	// Serve holds configuration for `ctm serve` (the local UI daemon).
+	// Missing from old configs is fine: strict decoding tolerates absent
+	// keys, and zero-valued fields fall back to built-in defaults via
+	// their accessor helpers.
+	Serve ServeConfig `json:"serve"`
+}
+
+// ServeConfig holds knobs for the `ctm serve` daemon. All fields are
+// optional; zero values resolve to defaults via ServeConfig accessors.
+type ServeConfig struct {
+	Port              int                 `json:"port"`
+	BearerToken       string              `json:"bearer_token"`
+	WebhookURL        string              `json:"webhook_url"`
+	WebhookAuth       string              `json:"webhook_auth"`
+	StatuslineDumpDir string              `json:"statusline_dump_dir"`
+	Attention         AttentionThresholds `json:"attention"`
+}
+
+// AttentionThresholds controls when `ctm serve` flags a session as
+// needing user attention. Zero fields resolve to defaults via
+// Resolved().
+type AttentionThresholds struct {
+	ErrorRatePct         int `json:"error_rate_pct"`
+	ErrorRateWindow      int `json:"error_rate_window"`
+	IdleMinutes          int `json:"idle_minutes"`
+	QuotaPct             int `json:"quota_pct"`
+	ContextPct           int `json:"context_pct"`
+	YoloUncheckedMinutes int `json:"yolo_unchecked_minutes"`
 }
 
 // Default values for log rotation knobs. Exposed as constants so callers
@@ -63,6 +92,54 @@ const (
 // sync manually so this package doesn't depend on internal/hooks (which
 // would create a cycle via cmd).
 const DefaultHookTimeoutSec = 5
+
+// Defaults for `ctm serve` attention thresholds and port. Exposed so
+// callers can reference them without re-hardcoding the numeric literal.
+const (
+	DefaultServePort                     = 37778
+	DefaultAttentionErrorRatePct         = 20
+	DefaultAttentionErrorRateWindow      = 20
+	DefaultAttentionIdleMinutes          = 5
+	DefaultAttentionQuotaPct             = 85
+	DefaultAttentionContextPct           = 90
+	DefaultAttentionYoloUncheckedMinutes = 30
+)
+
+// Port returns the listen port for `ctm serve`, substituting
+// DefaultServePort when the configured value is non-positive so old
+// configs that predate the serve block still bind the canonical port.
+func (s ServeConfig) ResolvedPort() int {
+	if s.Port <= 0 {
+		return DefaultServePort
+	}
+	return s.Port
+}
+
+// Resolved returns a copy of t with any zero-valued field replaced by
+// its built-in default. Mirrors LogPolicy()/HookTimeout(): old configs
+// loaded without the attention block get sane thresholds without a
+// schema bump.
+func (t AttentionThresholds) Resolved() AttentionThresholds {
+	if t.ErrorRatePct <= 0 {
+		t.ErrorRatePct = DefaultAttentionErrorRatePct
+	}
+	if t.ErrorRateWindow <= 0 {
+		t.ErrorRateWindow = DefaultAttentionErrorRateWindow
+	}
+	if t.IdleMinutes <= 0 {
+		t.IdleMinutes = DefaultAttentionIdleMinutes
+	}
+	if t.QuotaPct <= 0 {
+		t.QuotaPct = DefaultAttentionQuotaPct
+	}
+	if t.ContextPct <= 0 {
+		t.ContextPct = DefaultAttentionContextPct
+	}
+	if t.YoloUncheckedMinutes <= 0 {
+		t.YoloUncheckedMinutes = DefaultAttentionYoloUncheckedMinutes
+	}
+	return t
+}
 
 // HookTimeout returns the per-hook wall-clock ceiling. A zero
 // HookTimeoutSec resolves to DefaultHookTimeoutSec so old configs (and
@@ -87,6 +164,17 @@ func Default() Config {
 		LogMaxSizeMB:            DefaultLogMaxSizeMB,
 		LogMaxAgeDays:           DefaultLogMaxAgeDays,
 		LogMaxFiles:             DefaultLogMaxFiles,
+		Serve: ServeConfig{
+			Port: DefaultServePort,
+			Attention: AttentionThresholds{
+				ErrorRatePct:         DefaultAttentionErrorRatePct,
+				ErrorRateWindow:      DefaultAttentionErrorRateWindow,
+				IdleMinutes:          DefaultAttentionIdleMinutes,
+				QuotaPct:             DefaultAttentionQuotaPct,
+				ContextPct:           DefaultAttentionContextPct,
+				YoloUncheckedMinutes: DefaultAttentionYoloUncheckedMinutes,
+			},
+		},
 	}
 }
 

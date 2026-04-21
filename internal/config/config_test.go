@@ -223,6 +223,141 @@ func TestLogPolicy_ExplicitValuesRespected(t *testing.T) {
 	}
 }
 
+func TestDefault_PopulatesServeDefaults(t *testing.T) {
+	cfg := Default()
+	if cfg.Serve.Port != DefaultServePort {
+		t.Errorf("Serve.Port = %d, want %d", cfg.Serve.Port, DefaultServePort)
+	}
+	want := AttentionThresholds{
+		ErrorRatePct:         DefaultAttentionErrorRatePct,
+		ErrorRateWindow:      DefaultAttentionErrorRateWindow,
+		IdleMinutes:          DefaultAttentionIdleMinutes,
+		QuotaPct:             DefaultAttentionQuotaPct,
+		ContextPct:           DefaultAttentionContextPct,
+		YoloUncheckedMinutes: DefaultAttentionYoloUncheckedMinutes,
+	}
+	if cfg.Serve.Attention != want {
+		t.Errorf("Serve.Attention = %+v, want %+v", cfg.Serve.Attention, want)
+	}
+	// Optional/user-supplied fields must stay empty by default.
+	if cfg.Serve.BearerToken != "" || cfg.Serve.WebhookURL != "" ||
+		cfg.Serve.WebhookAuth != "" || cfg.Serve.StatuslineDumpDir != "" {
+		t.Errorf("optional serve fields populated unexpectedly: %+v", cfg.Serve)
+	}
+}
+
+func TestAttentionThresholds_ResolvedFillsZeros(t *testing.T) {
+	got := AttentionThresholds{}.Resolved()
+	want := AttentionThresholds{
+		ErrorRatePct:         DefaultAttentionErrorRatePct,
+		ErrorRateWindow:      DefaultAttentionErrorRateWindow,
+		IdleMinutes:          DefaultAttentionIdleMinutes,
+		QuotaPct:             DefaultAttentionQuotaPct,
+		ContextPct:           DefaultAttentionContextPct,
+		YoloUncheckedMinutes: DefaultAttentionYoloUncheckedMinutes,
+	}
+	if got != want {
+		t.Errorf("Resolved() on zero = %+v, want %+v", got, want)
+	}
+}
+
+func TestAttentionThresholds_ResolvedPreservesExplicit(t *testing.T) {
+	in := AttentionThresholds{
+		ErrorRatePct:         1,
+		ErrorRateWindow:      2,
+		IdleMinutes:          3,
+		QuotaPct:             4,
+		ContextPct:           5,
+		YoloUncheckedMinutes: 6,
+	}
+	if got := in.Resolved(); got != in {
+		t.Errorf("Resolved() altered explicit values: %+v -> %+v", in, got)
+	}
+}
+
+func TestServeConfig_ResolvedPortFallsBackToDefault(t *testing.T) {
+	if got := (ServeConfig{}).ResolvedPort(); got != DefaultServePort {
+		t.Errorf("ResolvedPort() zero = %d, want %d", got, DefaultServePort)
+	}
+	if got := (ServeConfig{Port: 9999}).ResolvedPort(); got != 9999 {
+		t.Errorf("ResolvedPort() explicit = %d, want 9999", got)
+	}
+}
+
+func TestLoad_ConfigWithoutServeKeyStillParses(t *testing.T) {
+	// Existing v0.1 config.json files predate the serve block. Strict
+	// decoding tolerates missing subkeys (only unknown ones fail), so
+	// these must load clean with zero-valued Serve + no backup written.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	legacy := `{
+  "schema_version": 1,
+  "scrollback_lines": 4242,
+  "default_mode": "safe"
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load on pre-serve config: %v", err)
+	}
+	if cfg.ScrollbackLines != 4242 {
+		t.Errorf("ScrollbackLines = %d, want 4242", cfg.ScrollbackLines)
+	}
+	if cfg.Serve != (ServeConfig{}) {
+		t.Errorf("Serve should be zero-valued on legacy load, got %+v", cfg.Serve)
+	}
+	// Accessors must still return sensible defaults on a zero Serve.
+	if got := cfg.Serve.ResolvedPort(); got != DefaultServePort {
+		t.Errorf("ResolvedPort() on legacy = %d, want %d", got, DefaultServePort)
+	}
+
+	// No unknown-keys backup should have been produced — the key was
+	// absent, not unknown.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".bak.unknowns.") {
+			t.Errorf("unexpected unknowns backup created: %s", e.Name())
+		}
+	}
+}
+
+func TestLoad_ServeBlockRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	orig := Default()
+	orig.Serve = ServeConfig{
+		Port:              40000,
+		BearerToken:       "tok-abc",
+		WebhookURL:        "https://example.invalid/hook",
+		WebhookAuth:       "Bearer xyz",
+		StatuslineDumpDir: "/var/tmp/ctm-sl",
+		Attention: AttentionThresholds{
+			ErrorRatePct:         33,
+			ErrorRateWindow:      50,
+			IdleMinutes:          7,
+			QuotaPct:             90,
+			ContextPct:           95,
+			YoloUncheckedMinutes: 15,
+		},
+	}
+
+	if err := write(path, orig); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Serve != orig.Serve {
+		t.Errorf("Serve round-trip mismatch:\n got  = %+v\n want = %+v", loaded.Serve, orig.Serve)
+	}
+}
+
 func TestLoad_StripsUnknownKeysAndBacksUp(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
