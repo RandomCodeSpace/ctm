@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Settings, Stethoscope } from "lucide-react";
+import { Search, Settings, Stethoscope } from "lucide-react";
 import { QuotaStrip } from "@/components/QuotaStrip";
+import { SearchPalette } from "@/components/SearchPalette";
 import { SessionListPanel } from "@/components/SessionListPanel";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SessionDetail } from "@/routes/SessionDetail";
+import { useHotkey } from "@/hooks/useHotkey";
 import { sortSessions, useSessions } from "@/hooks/useSessions";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,9 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { data: sessions } = useSessions();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useHotkey(["mod+k", "/"], openSearch);
 
   // Desktop-only: when nothing is selected, auto-navigate to the top
   // active session. Uses the same sortSessions order as the list so
@@ -55,6 +60,15 @@ export function Dashboard() {
       <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-serif text-xl font-bold tracking-tight">ctm</h1>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label="Open search"
+            title="Search (Cmd+K)"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
+          >
+            <Search size={16} aria-hidden />
+          </button>
           <Link
             to="/doctor"
             aria-label="Open doctor diagnostics"
@@ -78,6 +92,11 @@ export function Dashboard() {
       <SettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+      />
+      <SearchPalette
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        sessionName={name}
       />
 
       <div className="shrink-0">
