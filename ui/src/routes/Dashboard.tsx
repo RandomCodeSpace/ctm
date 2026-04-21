@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Search, Settings, Stethoscope } from "lucide-react";
+import { CostChart } from "@/components/CostChart";
 import { QuotaStrip } from "@/components/QuotaStrip";
 import { SearchPalette } from "@/components/SearchPalette";
 import { SessionListPanel } from "@/components/SessionListPanel";
@@ -101,6 +102,10 @@ export function Dashboard() {
 
       <div className="shrink-0">
         <QuotaStrip />
+      </div>
+
+      <div className="hidden shrink-0 md:block">
+        <CostChart />
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">

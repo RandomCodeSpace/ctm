@@ -18,6 +18,7 @@ import { HealthDot, healthState } from "@/components/HealthDot";
 import { AttentionLabel } from "@/components/AttentionLabel";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { LogDiskUsage } from "@/components/LogDiskUsage";
+import { CostChart } from "@/components/CostChart";
 import { useSession, type Session } from "@/hooks/useSessions";
 import { useCheckpoints, type Checkpoint } from "@/hooks/useCheckpoints";
 import { relativeTime, shortenPath } from "@/lib/format";
@@ -164,6 +165,7 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
             <>
               <MetaList session={session} />
               <LogDiskUsage />
+              <CostChart sessionName={name} />
             </>
           )}
         </TabsContent>

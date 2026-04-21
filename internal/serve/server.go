@@ -25,6 +25,7 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 	"github.com/RandomCodeSpace/ctm/internal/serve/events"
 	"github.com/RandomCodeSpace/ctm/internal/serve/ingest"
+	"github.com/RandomCodeSpace/ctm/internal/serve/store"
 	"github.com/RandomCodeSpace/ctm/internal/serve/webhook"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -126,6 +127,7 @@ type Server struct {
 	webhook    *webhook.Dispatcher
 	tmuxClient   *tmux.Client
 	sessionStore *session.Store
+	cost         store.CostStore
 	logDir       string
 }
 
@@ -191,6 +193,16 @@ func New(opts Options) (*Server, error) {
 	hub := events.NewHub(0)
 	tmuxClient := tmux.NewClient(tmuxConf)
 	sessionStore := session.NewStore(sessionsPath)
+
+	// V13 cost store: persists per-session token/cost history so the
+	// dashboard chart survives daemon restarts. WAL mode + batched tx
+	// inserts keep the write path off the hub's hot loop.
+	costDB, err := store.OpenCostStore(filepath.Join(config.Dir(), "ctm.db"))
+	if err != nil {
+		_ = ln.Close()
+		return nil, fmt.Errorf("open cost db: %w", err)
+	}
+
 	proj := ingest.New(sessionsPath, tmuxClient)
 	quota := ingest.NewQuotaIngester(dumpDir, proj, hub)
 	cpCache := api.NewCheckpointsCache()
@@ -243,6 +255,7 @@ func New(opts Options) (*Server, error) {
 		webhook:      disp,
 		tmuxClient:   tmuxClient,
 		sessionStore: sessionStore,
+		cost:         costDB,
 		logDir:       logDir,
 	}
 
@@ -298,6 +311,18 @@ func (s *Server) Run(ctx context.Context) error {
 	defer whCancel()
 	whDone := make(chan error, 1)
 	go func() { whDone <- s.webhook.Run(whCtx) }()
+
+	// V13 cost subscriber: writes per-session token/cost rows every
+	// time the quota ingester publishes a fresh triple. The goroutine
+	// exits when costCtx cancels; we wait on costDone in the shutdown
+	// sequence so the final batch lands before the DB closes.
+	costCtx, costCancel := context.WithCancel(ctx)
+	defer costCancel()
+	costDone := make(chan struct{})
+	go func() {
+		defer close(costDone)
+		store.SubscribeQuotaWriter(costCtx, s.hub, s.cost, nil)
+	}()
 
 	// Tailer adoption: scan the JSONL log directory and spawn a tailer
 	// for every UUID we find a log file for. The log files are the
@@ -387,6 +412,9 @@ func (s *Server) Run(ctx context.Context) error {
 		<-attDone
 		whCancel()
 		<-whDone
+		costCancel()
+		<-costDone
+		_ = s.cost.Close()
 		s.tailers.StopAll()
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
@@ -410,6 +438,9 @@ func (s *Server) Run(ctx context.Context) error {
 		<-attDone
 		whCancel()
 		<-whDone
+		costCancel()
+		<-costDone
+		_ = s.cost.Close()
 		s.tailers.StopAll()
 		err := <-serveDone
 		if shutErr != nil {
@@ -495,6 +526,11 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// V19 full-text search (slice 1): grep over *.jsonl under logDir.
 	// Slice 2 (UI bar) consumes this; slice 3 (FTS5) is deferred to v0.3.
 	mux.Handle("GET /api/search", authHF(api.Search(s.logDir, logsUUIDResolver{proj: s.proj})))
+
+	// V13 cumulative cost chart. Pulls from the SQLite cost store; adapter
+	// below copies store.CostPoint → api.CostPoint to keep the api package
+	// free of the store dependency.
+	mux.Handle("GET /api/cost", authHF(api.Cost(costSourceAdapter{s.cost})))
 
 	// V6 historical feed scroll. Returns tool_call rows older than a
 	// cursor by reading backwards over the session's JSONL log, so the
@@ -699,6 +735,30 @@ func (a quotaSourceAdapter) Snapshot() api.QuotaSnapshot {
 // back via ~/.claude/projects/*/<uuid>.jsonl so transcripts from
 // previous claude sessions in the same workdir still surface with
 // their tmux session name.
+// costSourceAdapter implements api.CostSource on top of store.CostStore.
+// The structs have identical field shapes so the conversion is direct.
+type costSourceAdapter struct{ s store.CostStore }
+
+func (a costSourceAdapter) Range(session string, since, until time.Time) ([]api.CostPoint, error) {
+	pts, err := a.s.Range(session, since, until)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.CostPoint, len(pts))
+	for i, p := range pts {
+		out[i] = api.CostPoint(p)
+	}
+	return out, nil
+}
+
+func (a costSourceAdapter) Totals(since time.Time) (api.CostTotals, error) {
+	t, err := a.s.Totals(since)
+	if err != nil {
+		return api.CostTotals{}, err
+	}
+	return api.CostTotals(t), nil
+}
+
 type logsUUIDResolver struct{ proj *ingest.Projection }
 
 func (r logsUUIDResolver) ResolveUUID(uuid string) (string, bool) {
