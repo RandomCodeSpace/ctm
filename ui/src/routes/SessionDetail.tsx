@@ -404,7 +404,10 @@ function MetaList({ session }: { session: Session }) {
     ["name", <code className="font-mono text-fg" key="n">{session.name}</code>],
     [
       "uuid",
-      <code className="font-mono text-xs text-fg" key="u">
+      // break-all lets the UUID wrap on any character so narrow
+      // viewports don't blow out the value column. all-small-caps
+      // hyphens stay together visually so readability holds.
+      <code className="break-all font-mono text-xs text-fg" key="u">
         {session.uuid}
       </code>,
     ],
@@ -417,7 +420,7 @@ function MetaList({ session }: { session: Session }) {
     [
       "workdir",
       <code
-        className="font-mono text-xs text-fg"
+        className="break-all font-mono text-xs text-fg"
         key="w"
         title={session.workdir}
       >
@@ -426,15 +429,19 @@ function MetaList({ session }: { session: Session }) {
     ],
     [
       "created",
-      <time dateTime={session.created_at} key="c">
-        {relativeTime(session.created_at)} ago ({session.created_at})
+      <time dateTime={session.created_at} key="c" title={session.created_at}>
+        {relativeTime(session.created_at)} ago
       </time>,
     ],
     [
       "last attached",
       session.last_attached_at ? (
-        <time dateTime={session.last_attached_at} key="la">
-          {relativeTime(session.last_attached_at)} ago ({session.last_attached_at})
+        <time
+          dateTime={session.last_attached_at}
+          key="la"
+          title={session.last_attached_at}
+        >
+          {relativeTime(session.last_attached_at)} ago
         </time>
       ) : (
         <span className="text-fg-dim" key="la-none">
@@ -467,14 +474,18 @@ function MetaList({ session }: { session: Session }) {
       ),
     ],
     [
-      "tokens (in/out/cache)",
+      "tokens",
       session.tokens ? (
-        <span className="font-mono tabular-nums text-fg" key="tok">
-          {session.tokens.input_tokens.toLocaleString()}
-          <span className="px-1 text-fg-muted">·</span>
-          {session.tokens.output_tokens.toLocaleString()}
-          <span className="px-1 text-fg-muted">·</span>
-          {session.tokens.cache_tokens.toLocaleString()}
+        <span
+          className="flex flex-wrap gap-x-1.5 font-mono tabular-nums text-fg"
+          key="tok"
+          title={`in ${session.tokens.input_tokens} · out ${session.tokens.output_tokens} · cache ${session.tokens.cache_tokens}`}
+        >
+          <span>{session.tokens.input_tokens.toLocaleString()}</span>
+          <span className="text-fg-muted">·</span>
+          <span>{session.tokens.output_tokens.toLocaleString()}</span>
+          <span className="text-fg-muted">·</span>
+          <span>{session.tokens.cache_tokens.toLocaleString()}</span>
         </span>
       ) : (
         <span className="text-fg-dim" key="tok-none">
@@ -495,9 +506,20 @@ function MetaList({ session }: { session: Session }) {
   ];
 
   return (
-    <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-3 px-6 py-6">
+    <dl
+      className={cn(
+        "grid gap-x-6 gap-y-3 px-6 py-6",
+        // Label above value on mobile (clean & lets values breathe);
+        // side-by-side at sm+ where the label column fits without
+        // crushing long values like the UUID or token tuple.
+        "grid-cols-1 sm:grid-cols-[max-content_1fr]",
+      )}
+    >
       {rows.map(([k, v]) => (
-        <div key={k} className="contents">
+        <div
+          key={k}
+          className="flex flex-col gap-y-1 sm:contents sm:gap-y-0"
+        >
           <dt className="text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
             {k}
           </dt>
