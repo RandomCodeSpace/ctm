@@ -57,7 +57,7 @@ func TestStatus_Unregistered(t *testing.T) {
 func TestStatus_RegisteredButAnonymous(t *testing.T) {
 	authTempHome(t)
 	enc, _ := auth.Hash("pw")
-	_ = auth.Save(auth.User{Username: "alice", Password: enc})
+	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
 	h := api.AuthStatus(store)
 	rec := httptest.NewRecorder()
@@ -72,9 +72,9 @@ func TestStatus_RegisteredButAnonymous(t *testing.T) {
 func TestStatus_Authenticated(t *testing.T) {
 	authTempHome(t)
 	enc, _ := auth.Hash("pw")
-	_ = auth.Save(auth.User{Username: "alice", Password: enc})
+	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
-	tok, _ := store.Create("alice")
+	tok, _ := store.Create("alice@example.com")
 	h := api.AuthStatus(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -95,13 +95,13 @@ func TestSignup_HappyPath(t *testing.T) {
 	h := api.AuthSignup(store)
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/signup",
-		map[string]string{"username": "alice", "password": "password123"}))
+		map[string]string{"username": "alice@example.com", "password": "password123"}))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d (%s), want 201", rec.Code, rec.Body.String())
 	}
 	var body struct{ Token, Username string }
 	_ = json.NewDecoder(rec.Body).Decode(&body)
-	if body.Token == "" || body.Username != "alice" {
+	if body.Token == "" || body.Username != "alice@example.com" {
 		t.Fatalf("body = %+v", body)
 	}
 	if _, ok := store.Lookup(body.Token); !ok {
@@ -115,12 +115,12 @@ func TestSignup_HappyPath(t *testing.T) {
 func TestSignup_AlreadyRegistered(t *testing.T) {
 	authTempHome(t)
 	enc, _ := auth.Hash("pw")
-	_ = auth.Save(auth.User{Username: "bob", Password: enc})
+	_ = auth.Save(auth.User{Username: "bob@example.com", Password: enc})
 	store := auth.NewStore()
 	h := api.AuthSignup(store)
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/signup",
-		map[string]string{"username": "alice", "password": "password123"}))
+		map[string]string{"username": "alice@example.com", "password": "password123"}))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", rec.Code)
 	}
@@ -136,9 +136,9 @@ func TestSignup_BadBody(t *testing.T) {
 	cases := []map[string]string{
 		{},
 		{"username": "ab", "password": "password123"},
-		{"username": "alice", "password": "short"},
+		{"username": "alice@example.com", "password": "short"},
 		{"username": "has space", "password": "password123"},
-		{"username": "alice", "password": "        "},
+		{"username": "alice@example.com", "password": "        "},
 	}
 	for i, c := range cases {
 		rec := httptest.NewRecorder()
@@ -154,18 +154,18 @@ func TestSignup_BadBody(t *testing.T) {
 func TestLogin_HappyPath(t *testing.T) {
 	authTempHome(t)
 	enc, _ := auth.Hash("password123")
-	_ = auth.Save(auth.User{Username: "alice", Password: enc})
+	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
 	h := api.AuthLogin(store)
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
-		map[string]string{"username": "alice", "password": "password123"}))
+		map[string]string{"username": "alice@example.com", "password": "password123"}))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
 	}
 	var body struct{ Token, Username string }
 	_ = json.NewDecoder(rec.Body).Decode(&body)
-	if body.Token == "" || body.Username != "alice" {
+	if body.Token == "" || body.Username != "alice@example.com" {
 		t.Fatalf("body = %+v", body)
 	}
 }
@@ -173,12 +173,12 @@ func TestLogin_HappyPath(t *testing.T) {
 func TestLogin_BadPassword(t *testing.T) {
 	authTempHome(t)
 	enc, _ := auth.Hash("password123")
-	_ = auth.Save(auth.User{Username: "alice", Password: enc})
+	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
 	h := api.AuthLogin(store)
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
-		map[string]string{"username": "alice", "password": "wrong"}))
+		map[string]string{"username": "alice@example.com", "password": "wrong"}))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
@@ -190,12 +190,12 @@ func TestLogin_BadPassword(t *testing.T) {
 func TestLogin_UnknownUsername(t *testing.T) {
 	authTempHome(t)
 	enc, _ := auth.Hash("password123")
-	_ = auth.Save(auth.User{Username: "alice", Password: enc})
+	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
 	h := api.AuthLogin(store)
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
-		map[string]string{"username": "mallory", "password": "password123"}))
+		map[string]string{"username": "mallory@example.com", "password": "password123"}))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
@@ -207,7 +207,7 @@ func TestLogin_NotRegistered(t *testing.T) {
 	h := api.AuthLogin(store)
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
-		map[string]string{"username": "alice", "password": "password123"}))
+		map[string]string{"username": "alice@example.com", "password": "password123"}))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
@@ -221,9 +221,9 @@ func TestLogin_NotRegistered(t *testing.T) {
 func TestLogout_RevokesToken(t *testing.T) {
 	authTempHome(t)
 	enc, _ := auth.Hash("pw")
-	_ = auth.Save(auth.User{Username: "alice", Password: enc})
+	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
-	tok, _ := store.Create("alice")
+	tok, _ := store.Create("alice@example.com")
 	h := api.AuthLogout(store)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)

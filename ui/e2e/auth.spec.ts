@@ -9,7 +9,7 @@ test.describe("Auth (V27)", () => {
       page.getByRole("heading", { name: /create your ctm account/i }),
     ).toBeVisible();
 
-    await page.getByLabel(/username/i).fill("alice");
+    await page.getByLabel(/email/i).fill("alice@example.com");
     await page.getByLabel(/^password$/i).fill("password123");
     await page.getByLabel(/confirm/i).fill("password123");
     await page.getByRole("button", { name: /create account/i }).click();
@@ -28,7 +28,7 @@ test.describe("Auth (V27)", () => {
       page.getByRole("heading", { name: /log in to ctm/i }),
     ).toBeVisible();
 
-    await page.getByLabel(/username/i).fill("alice");
+    await page.getByLabel(/email/i).fill("alice@example.com");
     await page.getByLabel(/^password$/i).fill("password123");
     await page.getByRole("button", { name: /log in/i }).click();
 
@@ -49,7 +49,7 @@ test.describe("Auth (V27)", () => {
       }),
     );
     await page.goto("/");
-    await page.getByLabel(/username/i).fill("alice");
+    await page.getByLabel(/email/i).fill("alice@example.com");
     await page.getByLabel(/^password$/i).fill("wrong");
     await page.getByRole("button", { name: /log in/i }).click();
     await expect(page.getByRole("alert")).toBeVisible();
@@ -65,7 +65,7 @@ test.describe("Auth (V27)", () => {
       }),
     );
     await page.goto("/");
-    await page.getByLabel(/username/i).fill("alice");
+    await page.getByLabel(/email/i).fill("alice@example.com");
     await page.getByLabel(/^password$/i).fill("password123");
     await page.getByLabel(/confirm/i).fill("password123");
     await page.getByRole("button", { name: /create account/i }).click();

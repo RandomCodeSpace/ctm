@@ -37,7 +37,7 @@ export function LoginForm({ onSwitchToSignup }: Props) {
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-border bg-surface p-6">
       <h1 className="mb-4 font-serif text-xl font-bold">Log in to ctm</h1>
       <form onSubmit={onSubmit} className="space-y-3">
-        <Field label="Username" value={username} onChange={setUsername} autoComplete="username" />
+        <Field label="Email" type="email" value={username} onChange={setUsername} autoComplete="email" />
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
         {err && (
           <div role="alert" className="text-[11px] text-alert-ember">
@@ -60,6 +60,9 @@ export function LoginForm({ onSwitchToSignup }: Props) {
         >
           Log in
         </button>
+        <p className="pt-2 text-[11px] text-fg-dim">
+          Forgot password? Run <code className="rounded bg-surface-2 px-1 py-0.5 font-mono">ctm auth reset</code> on the host, then sign up again.
+        </p>
       </form>
     </div>
   );

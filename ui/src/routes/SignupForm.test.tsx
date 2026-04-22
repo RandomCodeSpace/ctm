@@ -39,7 +39,7 @@ describe("SignupForm", () => {
     const btn = screen.getByRole("button", { name: /create account/i });
     expect(btn).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText(/username/i), "alice");
+    await userEvent.type(screen.getByLabelText(/email/i), "alice@example.com");
     await userEvent.type(screen.getByLabelText(/^password$/i), "password123");
     expect(btn).toBeDisabled();
 
@@ -54,10 +54,10 @@ describe("SignupForm", () => {
 
   it("POSTs to /api/auth/signup with username + password", async () => {
     const fetchMock = stubFetch([
-      { status: 201, body: { token: "t", username: "alice" } },
+      { status: 201, body: { token: "t", username: "alice@example.com" } },
     ]);
     render(wrap(<SignupForm />));
-    await userEvent.type(screen.getByLabelText(/username/i), "alice");
+    await userEvent.type(screen.getByLabelText(/email/i), "alice@example.com");
     await userEvent.type(screen.getByLabelText(/^password$/i), "password123");
     await userEvent.type(screen.getByLabelText(/confirm/i), "password123");
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
@@ -66,7 +66,7 @@ describe("SignupForm", () => {
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toMatch(/\/api\/auth\/signup$/);
     expect(JSON.parse(String(call[1]?.body))).toEqual({
-      username: "alice",
+      username: "alice@example.com",
       password: "password123",
     });
   });
@@ -76,7 +76,7 @@ describe("SignupForm", () => {
       { status: 409, body: { error: "already_registered", message: "exists" } },
     ]);
     render(wrap(<SignupForm onSwitchToLogin={vi.fn()} />));
-    await userEvent.type(screen.getByLabelText(/username/i), "alice");
+    await userEvent.type(screen.getByLabelText(/email/i), "alice@example.com");
     await userEvent.type(screen.getByLabelText(/^password$/i), "password123");
     await userEvent.type(screen.getByLabelText(/confirm/i), "password123");
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));

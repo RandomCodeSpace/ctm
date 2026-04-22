@@ -15,7 +15,9 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 )
 
-var authUsernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{3,32}$`)
+var authUsernameRe = regexp.MustCompile(`^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$`)
+
+const authUsernameMax = 254
 
 const authPasswordMin = 8
 const authBodyMax = 1024
@@ -195,8 +197,8 @@ func decodeAuthBody(r *http.Request, w http.ResponseWriter, out *authCredsBody) 
 }
 
 func validateCreds(b authCredsBody) error {
-	if !authUsernameRe.MatchString(b.Username) {
-		return errors.New("username must match ^[A-Za-z0-9._-]{3,32}$")
+	if len(b.Username) > authUsernameMax || !authUsernameRe.MatchString(b.Username) {
+		return errors.New("username must be a valid email address")
 	}
 	if len(b.Password) < authPasswordMin {
 		return errors.New("password must be at least 8 characters")

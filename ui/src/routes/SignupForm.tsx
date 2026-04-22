@@ -42,7 +42,7 @@ export function SignupForm({ onSwitchToLogin }: Props) {
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-border bg-surface p-6">
       <h1 className="mb-4 font-serif text-xl font-bold">Create your ctm account</h1>
       <form onSubmit={onSubmit} className="space-y-3">
-        <Field label="Username" value={username} onChange={setUsername} autoComplete="username" />
+        <Field label="Email" type="email" value={username} onChange={setUsername} autoComplete="email" />
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="new-password" />
         <Field label="Confirm password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
         {err && (
