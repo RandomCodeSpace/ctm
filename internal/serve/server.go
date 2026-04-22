@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -606,6 +607,12 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/sessions/{name}/input",
 		authHF(api.RequireOriginFunc(allowedOrigins,
 			api.Input(inputSessionSource{proj: s.proj}, s.tmuxClient))))
+	mux.Handle("POST /api/sessions",
+		authHF(api.RequireOriginFunc(allowedOrigins,
+			api.CreateSession(
+				inputSessionSource{proj: s.proj},
+				createSpawner{store: s.sessionStore, tmux: s.tmuxClient},
+				execLookPath{}))))
 
 	// Debug: hub counters + subscriber count. Gated on auth; useful
 	// from curl to check whether publishes are flowing and whether
@@ -832,6 +839,27 @@ func (a costSourceAdapter) Totals(since time.Time) (api.CostTotals, error) {
 	}
 	return api.CostTotals(t), nil
 }
+
+// createSpawner adapts session.Yolo to api.CreateSpawner.
+type createSpawner struct {
+	store *session.Store
+	tmux  *tmux.Client
+}
+
+func (c createSpawner) Spawn(name, workdir string) (session.Session, error) {
+	return session.Yolo(session.SpawnOpts{
+		Name:    name,
+		Workdir: workdir,
+		Tmux:    c.tmux,
+		Store:   c.store,
+	})
+}
+
+// execLookPath is a tiny adapter so api.CreateLookPath can be
+// satisfied by the free function os/exec.LookPath.
+type execLookPath struct{}
+
+func (execLookPath) LookPath(file string) (string, error) { return exec.LookPath(file) }
 
 // inputSessionSource adapts *ingest.Projection to api.InputSessionSource.
 // Both Get and TmuxAlive are implemented directly on *ingest.Projection.
