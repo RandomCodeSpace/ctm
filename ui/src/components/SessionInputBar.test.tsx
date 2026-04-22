@@ -22,7 +22,7 @@ function renderBar(props: { sessionName: string; mode: "yolo" | "safe" }) {
 }
 
 function stubFetchOK() {
-  const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
     return new Response(null, { status: 204 });
   });
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;

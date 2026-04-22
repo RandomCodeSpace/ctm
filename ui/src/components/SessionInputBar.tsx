@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+// Note: using useRef only for the error timer; the text input is
+// uncontrolled-from-React's-perspective via its `value` prop.
 import { Send } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { useSendInput } from "@/hooks/useSendInput";
@@ -22,7 +24,6 @@ export function SessionInputBar({ sessionName, mode }: SessionInputBarProps) {
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const errTimer = useRef<number | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const flash = useCallback((msg: string) => {
     setErr(msg);
@@ -84,7 +85,6 @@ export function SessionInputBar({ sessionName, mode }: SessionInputBarProps) {
           }}
         >
           <input
-            ref={inputRef}
             type="text"
             maxLength={256}
             aria-label="Custom input"
