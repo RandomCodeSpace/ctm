@@ -9,6 +9,7 @@ import { DoctorPanel } from "@/routes/DoctorPanel";
 import { FeedFullscreen } from "@/routes/FeedFullscreen";
 import { TokenPasteScreen } from "@/routes/TokenPasteScreen";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { AuthGate } from "@/routes/AuthGate";
 
 /*
  * Routing intent: in two-pane mode (>=768px) the Dashboard owns both
@@ -62,8 +63,10 @@ export function App() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <SseProvider>
-            <ConnectionBanner />
-            <RouterProvider router={router} />
+            <AuthGate>
+              <ConnectionBanner />
+              <RouterProvider router={router} />
+            </AuthGate>
           </SseProvider>
         </AuthProvider>
       </QueryClientProvider>
