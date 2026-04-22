@@ -92,8 +92,8 @@ func TestInput_Preset_Yes(t *testing.T) {
 	if tmux.lastTarget != "alpha:0.0" {
 		t.Fatalf("tmux target = %q, want %q", tmux.lastTarget, "alpha:0.0")
 	}
-	if tmux.lastKeys != "y" {
-		t.Fatalf("tmux literal = %q, want %q", tmux.lastKeys, "y")
+	if tmux.lastKeys != "Approve" {
+		t.Fatalf("tmux literal = %q, want %q", tmux.lastKeys, "Approve")
 	}
 	if tmux.enterCalls != 1 {
 		t.Fatalf("SendEnter called %d times, want 1", tmux.enterCalls)
@@ -108,8 +108,8 @@ func TestInput_Preset_No(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	if tmux.lastKeys != "n" || tmux.enterCalls != 1 {
-		t.Fatalf("tmux literal=%q enters=%d, want %q + 1", tmux.lastKeys, tmux.enterCalls, "n")
+	if tmux.lastKeys != "Deny" || tmux.enterCalls != 1 {
+		t.Fatalf("tmux literal=%q enters=%d, want %q + 1", tmux.lastKeys, tmux.enterCalls, "Deny")
 	}
 }
 

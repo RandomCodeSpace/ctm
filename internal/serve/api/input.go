@@ -132,11 +132,13 @@ func expandInput(b inputReq) (string, error) {
 	if hasPreset {
 		switch b.Preset {
 		case "yes":
-			return "y\n", nil
+			return "Approve\n", nil
 		case "no":
-			return "n\n", nil
+			return "Deny\n", nil
 		case "continue":
 			return "\n", nil
+		case "follow":
+			return "Follow recommended\n", nil
 		default:
 			return "", errInputPreset
 		}

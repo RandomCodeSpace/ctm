@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
  */
 export type SendInputBody =
   | { text: string; preset?: never }
-  | { preset: "yes" | "no" | "continue"; text?: never };
+  | { preset: "yes" | "no" | "continue" | "follow"; text?: never };
 
 export function useSendInput(sessionName: string | undefined) {
   return useMutation<void, Error, SendInputBody>({

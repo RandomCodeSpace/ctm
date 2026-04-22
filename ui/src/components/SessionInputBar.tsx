@@ -11,7 +11,7 @@ interface SessionInputBarProps {
   mode: "safe" | "yolo";
 }
 
-type Preset = "yes" | "no" | "continue";
+type Preset = "yes" | "no" | "continue" | "follow";
 
 /**
  * V25 — sticky bottom bar that types short answers into a running
@@ -72,13 +72,16 @@ export function SessionInputBar({ sessionName, mode }: SessionInputBarProps) {
         "flex shrink-0 flex-col gap-1 border-t border-border bg-bg px-3 py-2",
       )}
     >
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <PresetButton label="Approve" onClick={() => runPreset("yes")} />
         <PresetButton label="Deny" onClick={() => runPreset("no")} />
         <PresetButton label="Continue" onClick={() => runPreset("continue")} />
+        <PresetButton label="Follow Recommended" onClick={() => runPreset("follow")} />
+      </div>
 
+      <div className="flex items-center gap-1.5">
         <form
-          className="ml-auto flex min-w-0 flex-1 items-center gap-1.5"
+          className="flex min-w-0 flex-1 items-center gap-1.5"
           onSubmit={(e) => {
             e.preventDefault();
             runText();
