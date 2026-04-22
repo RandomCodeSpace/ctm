@@ -46,7 +46,7 @@ function tabFromPath(pathname: string): TabKey {
   if (pathname.endsWith("/subagents")) return "subagents";
   if (pathname.endsWith("/teams")) return "teams";
   if (pathname.endsWith("/meta")) return "meta";
-  return "feed";
+  return "pane";
 }
 
 /**
@@ -64,7 +64,7 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
   function changeTab(next: TabKey) {
     if (!name) return;
     const base = `/s/${encodeURIComponent(name)}`;
-    const target = next === "feed" ? base : `${base}/${next}`;
+    const target = next === "pane" ? base : `${base}/${next}`;
     navigate(target, { replace: true });
   }
 
@@ -152,11 +152,11 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
               "[&::-webkit-scrollbar]:hidden",
             )}
           >
+            <TabTrigger value="pane">Pane</TabTrigger>
             <TabTrigger value="feed">Feed</TabTrigger>
             <TabTrigger value="checkpoints">Checkpoints</TabTrigger>
             <TabTrigger value="subagents">Subagents</TabTrigger>
             <TabTrigger value="teams">Teams</TabTrigger>
-            <TabTrigger value="pane">Pane</TabTrigger>
             <TabTrigger value="meta">Meta</TabTrigger>
           </TabsList>
           <div
