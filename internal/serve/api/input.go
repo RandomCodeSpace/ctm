@@ -73,6 +73,7 @@ func Input(src InputSessionSource, tmux InputTmux) http.HandlerFunc {
 		}
 
 		var body inputReq
+		r.Body = http.MaxBytesReader(w, r.Body, 1024)
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeInputErr(w, http.StatusBadRequest, "invalid_body", err.Error())
 			return
