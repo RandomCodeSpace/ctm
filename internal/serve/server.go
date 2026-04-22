@@ -603,6 +603,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		authHF(api.RequireOriginFunc(allowedOrigins, api.Rename(s.sessionStore, s.tmuxClient, s.proj))))
 	mux.Handle("GET /api/sessions/{name}/attach-url",
 		authHF(api.RequireOriginFunc(allowedOrigins, api.AttachURL())))
+	mux.Handle("POST /api/sessions/{name}/input",
+		authHF(api.RequireOriginFunc(allowedOrigins,
+			api.Input(inputSessionSource{proj: s.proj}, s.tmuxClient))))
 
 	// Debug: hub counters + subscriber count. Gated on auth; useful
 	// from curl to check whether publishes are flowing and whether
@@ -828,6 +831,18 @@ func (a costSourceAdapter) Totals(since time.Time) (api.CostTotals, error) {
 		return api.CostTotals{}, err
 	}
 	return api.CostTotals(t), nil
+}
+
+// inputSessionSource adapts *ingest.Projection to api.InputSessionSource.
+// Both Get and TmuxAlive are implemented directly on *ingest.Projection.
+type inputSessionSource struct{ proj *ingest.Projection }
+
+func (a inputSessionSource) Get(name string) (session.Session, bool) {
+	return a.proj.Get(name)
+}
+
+func (a inputSessionSource) TmuxAlive(name string) bool {
+	return a.proj.TmuxAlive(name)
 }
 
 type logsUUIDResolver struct{ proj *ingest.Projection }
