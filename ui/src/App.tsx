@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RouterProvider, createBrowserRouter } from "react-router";
+import { Navigate, RouterProvider, createBrowserRouter } from "react-router";
 import { useMemo } from "react";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -33,6 +33,7 @@ const router = createBrowserRouter([
   { path: "/s/:name/meta", element: <Dashboard /> },
   { path: "/feed", element: <FeedFullscreen /> },
   { path: "/doctor", element: <DoctorPanel /> },
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
 export function App() {
