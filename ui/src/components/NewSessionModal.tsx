@@ -125,7 +125,7 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
                 onChange={(e) => setWorkdir(e.target.value)}
                 placeholder="/home/dev/projects/…"
                 autoFocus
-                className="mb-2 block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-xs text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold"
+                className="mb-2 block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
               />
 
               {recents.length > 0 && (
@@ -228,7 +228,7 @@ function CollisionPanel({
             aria-label="New name"
             value={name}
             onChange={(e) => onName(e.target.value)}
-            className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-xs text-fg focus:outline-none focus:ring-1 focus:ring-accent-gold"
+            className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
           />
         </div>
       ) : null}
