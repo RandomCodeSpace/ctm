@@ -19,6 +19,10 @@ import (
 // without spawning real tmux + claude.
 type CreateSpawner interface {
 	Spawn(name, workdir string) (session.Session, error)
+	// SendInitialPrompt fires a one-shot prompt into the new session
+	// after claude has had time to boot. Fire-and-forget; errors are
+	// logged but don't fail the create response.
+	SendInitialPrompt(name, text string)
 }
 
 // CreateLookPath is the seam used for the "claude on PATH" check.
@@ -28,8 +32,9 @@ type CreateLookPath interface {
 }
 
 type createReqBody struct {
-	Workdir string `json:"workdir"`
-	Name    string `json:"name,omitempty"`
+	Workdir       string `json:"workdir"`
+	Name          string `json:"name,omitempty"`
+	InitialPrompt string `json:"initial_prompt,omitempty"`
 }
 
 var createNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
@@ -103,6 +108,10 @@ func CreateSession(src InputSessionSource, sp CreateSpawner, lp CreateLookPath) 
 		if err != nil {
 			writeInputErr(w, http.StatusInternalServerError, "spawn_failed", err.Error())
 			return
+		}
+
+		if prompt := strings.TrimRight(body.InitialPrompt, " \t\n\r"); prompt != "" {
+			sp.SendInitialPrompt(sess.Name, prompt)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

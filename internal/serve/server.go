@@ -865,6 +865,23 @@ func (c createSpawner) Spawn(name, workdir string) (session.Session, error) {
 	})
 }
 
+// SendInitialPrompt fires `text` into the new session's pane after a
+// short delay so claude has time to boot and show its prompt. Runs
+// in a goroutine — fire-and-forget; errors are logged, not returned.
+func (c createSpawner) SendInitialPrompt(name, text string) {
+	go func() {
+		time.Sleep(3 * time.Second)
+		target := name + ":0.0"
+		if err := c.tmux.SendKeys(target, text); err != nil {
+			slog.Warn("initial prompt send failed", "session", name, "err", err.Error())
+			return
+		}
+		if err := c.tmux.SendEnter(target); err != nil {
+			slog.Warn("initial prompt enter failed", "session", name, "err", err.Error())
+		}
+	}()
+}
+
 // execLookPath is a tiny adapter so api.CreateLookPath can be
 // satisfied by the free function os/exec.LookPath.
 type execLookPath struct{}

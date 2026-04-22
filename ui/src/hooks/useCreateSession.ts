@@ -5,6 +5,7 @@ import type { Session } from "@/hooks/useSessions";
 export interface CreateSessionBody {
   workdir: string;
   name?: string;
+  initial_prompt?: string;
 }
 
 export interface CreateConflict {

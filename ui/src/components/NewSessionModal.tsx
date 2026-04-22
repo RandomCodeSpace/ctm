@@ -29,6 +29,7 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
   const create = useCreateSession();
   const [workdir, setWorkdir] = useState(recents[0] ?? "");
   const [name, setName] = useState<string>("");
+  const [initialPrompt, setInitialPrompt] = useState<string>("");
   const [collision, setCollision] = useState<CreateConflict | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
     if (!open) return;
     setWorkdir(recents[0] ?? "");
     setName("");
+    setInitialPrompt("");
     setCollision(null);
     setRenaming(false);
     setErrMsg(null);
@@ -46,9 +48,11 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
   async function handleSubmit() {
     setErrMsg(null);
     try {
+      const trimmedPrompt = initialPrompt.trim();
       const sess = await create.mutateAsync({
         workdir,
         ...(renaming && name ? { name } : {}),
+        ...(trimmedPrompt ? { initial_prompt: trimmedPrompt } : {}),
       });
       navigate(`/s/${encodeURIComponent(sess.name)}`);
       onClose();
@@ -149,6 +153,18 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
                   </ul>
                 </div>
               )}
+
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
+                Initial prompt <span className="font-normal normal-case tracking-normal text-fg-dim">(optional — sent after boot)</span>
+              </label>
+              <textarea
+                aria-label="Initial prompt"
+                value={initialPrompt}
+                onChange={(e) => setInitialPrompt(e.target.value)}
+                placeholder="e.g. review the diff on main and suggest follow-ups"
+                rows={3}
+                className="mb-3 block w-full resize-y rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
+              />
 
               {errMsg && (
                 <div

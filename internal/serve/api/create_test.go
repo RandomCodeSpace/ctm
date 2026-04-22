@@ -30,10 +30,12 @@ func (f *fakeCreateProj) Get(name string) (session.Session, bool) {
 func (f *fakeCreateProj) TmuxAlive(name string) bool { return true }
 
 type fakeCreateSpawner struct {
-	returnSess session.Session
-	err        error
-	calledWith struct{ name, workdir string }
-	called     int
+	returnSess   session.Session
+	err          error
+	calledWith   struct{ name, workdir string }
+	called       int
+	initialCalls int
+	initialArgs  struct{ name, text string }
 }
 
 func (f *fakeCreateSpawner) Spawn(name, workdir string) (session.Session, error) {
@@ -47,6 +49,12 @@ func (f *fakeCreateSpawner) Spawn(name, workdir string) (session.Session, error)
 	s.Name = name
 	s.Workdir = workdir
 	return s, nil
+}
+
+func (f *fakeCreateSpawner) SendInitialPrompt(name, text string) {
+	f.initialCalls++
+	f.initialArgs.name = name
+	f.initialArgs.text = text
 }
 
 type fakeLookPath struct{ ok bool }
