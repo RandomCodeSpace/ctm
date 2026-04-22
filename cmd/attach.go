@@ -69,7 +69,7 @@ func runAttach(cmd *cobra.Command, args []string) error {
 }
 
 // createAndAttach creates a new session and attaches to it.
-func createAndAttach(name, workdir, mode string, store *session.Store, tc *tmux.Client, out *output.Printer) error {
+func createAndAttach(name, workdir, _ string, store *session.Store, tc *tmux.Client, out *output.Printer) error {
 	abs, err := filepath.Abs(workdir)
 	if err != nil {
 		return fmt.Errorf("resolving workdir: %w", err)
@@ -77,16 +77,16 @@ func createAndAttach(name, workdir, mode string, store *session.Store, tc *tmux.
 
 	out.Info("No session %q found — creating in %s", name, abs)
 
-	sess := session.New(name, abs, mode)
-	shellCmd := claude.BuildCommand(sess.UUID, mode, false, claude.OverlayPathIfExists(config.ClaudeOverlayPath()), claude.EnvFilePathIfExists(config.EnvFilePath()))
-
-	if err := tc.NewSession(name, abs, shellCmd); err != nil {
-		return fmt.Errorf("creating tmux session: %w", err)
-	}
-
-	if err := store.Save(sess); err != nil {
-		tc.KillSession(name) // clean up orphan
-		return fmt.Errorf("saving session state: %w", err)
+	sess, err := session.Yolo(session.SpawnOpts{
+		Name:        name,
+		Workdir:     abs,
+		Tmux:        tc,
+		Store:       store,
+		OverlayPath: claude.OverlayPathIfExists(config.ClaudeOverlayPath()),
+		EnvFilePath: claude.EnvFilePathIfExists(config.EnvFilePath()),
+	})
+	if err != nil {
+		return fmt.Errorf("createAndAttach spawn: %w", err)
 	}
 
 	if err := store.UpdateAttached(name); err != nil {
@@ -94,9 +94,9 @@ func createAndAttach(name, workdir, mode string, store *session.Store, tc *tmux.
 	}
 
 	out.Success("created session %q", name)
-	fireHook("on_new", sess)
-	fireServeEvent("session_new", sess)
-	fireServeEvent("session_attached", sess)
+	fireHook("on_new", &sess)
+	fireServeEvent("session_new", &sess)
+	fireServeEvent("session_attached", &sess)
 	return tc.Go(name)
 }
 
