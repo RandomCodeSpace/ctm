@@ -76,4 +76,40 @@ test.describe("Create session (V26)", () => {
     await page.getByRole("button", { name: /go to existing/i }).click();
     await expect(page).toHaveURL(/\/s\/ctm$/);
   });
+
+  test("fills initial prompt textarea and posts initial_prompt", async ({
+    page,
+  }) => {
+    const postedBodies: string[] = [];
+    await page.route("**/api/sessions", (route: Route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      postedBodies.push(route.request().postData() ?? "");
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          name: "ctm",
+          uuid: "u",
+          mode: "yolo",
+          workdir: "/home/dev/projects/ctm",
+          created_at: new Date().toISOString(),
+          is_active: true,
+          tmux_alive: true,
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /new session/i }).click();
+    await page
+      .getByRole("textbox", { name: /initial prompt/i })
+      .fill("review the diff");
+    await page.getByRole("button", { name: /create/i }).click();
+
+    await expect(page).toHaveURL(/\/s\/ctm$/);
+    expect(JSON.parse(postedBodies[0])).toEqual({
+      workdir: "/home/dev/projects/ctm",
+      initial_prompt: "review the diff",
+    });
+  });
 });

@@ -154,4 +154,55 @@ describe("NewSessionModal", () => {
       name: "ctm-2",
     });
   });
+
+  it("includes initial_prompt in the body when the textarea is filled", async () => {
+    const fetchMock = stubFetchSequence([
+      { status: 201, body: { name: "ctm", uuid: "u", mode: "yolo", workdir: "/ctm" } },
+    ]);
+    render(
+      wrap(<NewSessionModal open={true} onClose={vi.fn()} recents={["/ctm"]} />),
+    );
+    const textarea = screen.getByRole("textbox", { name: /initial prompt/i });
+    await userEvent.type(textarea, "review the diff");
+    await userEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(call[1]?.body))).toEqual({
+      workdir: "/ctm",
+      initial_prompt: "review the diff",
+    });
+  });
+
+  it("omits initial_prompt when the textarea is empty", async () => {
+    const fetchMock = stubFetchSequence([
+      { status: 201, body: { name: "ctm", uuid: "u", mode: "yolo", workdir: "/ctm" } },
+    ]);
+    render(
+      wrap(<NewSessionModal open={true} onClose={vi.fn()} recents={["/ctm"]} />),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(call[1]?.body));
+    expect(body).not.toHaveProperty("initial_prompt");
+  });
+
+  it("trims whitespace-only initial prompt and omits the field", async () => {
+    const fetchMock = stubFetchSequence([
+      { status: 201, body: { name: "ctm", uuid: "u", mode: "yolo", workdir: "/ctm" } },
+    ]);
+    render(
+      wrap(<NewSessionModal open={true} onClose={vi.fn()} recents={["/ctm"]} />),
+    );
+    const textarea = screen.getByRole("textbox", { name: /initial prompt/i });
+    await userEvent.type(textarea, "   ");
+    await userEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(call[1]?.body));
+    expect(body).not.toHaveProperty("initial_prompt");
+  });
 });

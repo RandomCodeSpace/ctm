@@ -111,6 +111,64 @@ func TestCreate_HappyPath(t *testing.T) {
 	if got.Mode != "yolo" {
 		t.Fatalf("mode = %q, want yolo", got.Mode)
 	}
+	if spawn.initialCalls != 0 {
+		t.Fatalf("SendInitialPrompt called %d times without initial_prompt, want 0", spawn.initialCalls)
+	}
+}
+
+func TestCreate_InitialPrompt_Fires(t *testing.T) {
+	dir := tempDir(t)
+	proj := &fakeCreateProj{sess: map[string]session.Session{}}
+	spawn := &fakeCreateSpawner{returnSess: session.Session{UUID: "u", Mode: "yolo"}}
+	h := api.CreateSession(proj, spawn, fakeLookPath{ok: true})
+
+	rec := httptest.NewRecorder()
+	h(rec, createReq(t, map[string]string{"workdir": dir, "initial_prompt": "review the diff"}))
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d (%s), want 201", rec.Code, rec.Body.String())
+	}
+	if spawn.initialCalls != 1 {
+		t.Fatalf("SendInitialPrompt called %d times, want 1", spawn.initialCalls)
+	}
+	if spawn.initialArgs.text != "review the diff" {
+		t.Fatalf("prompt text = %q, want %q", spawn.initialArgs.text, "review the diff")
+	}
+	if spawn.initialArgs.name != filepath.Base(dir) {
+		t.Fatalf("prompt name = %q, want %q", spawn.initialArgs.name, filepath.Base(dir))
+	}
+}
+
+func TestCreate_InitialPrompt_Empty_Skips(t *testing.T) {
+	dir := tempDir(t)
+	spawn := &fakeCreateSpawner{returnSess: session.Session{UUID: "u", Mode: "yolo"}}
+	h := api.CreateSession(&fakeCreateProj{sess: map[string]session.Session{}}, spawn, fakeLookPath{ok: true})
+
+	rec := httptest.NewRecorder()
+	h(rec, createReq(t, map[string]string{"workdir": dir, "initial_prompt": ""}))
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", rec.Code)
+	}
+	if spawn.initialCalls != 0 {
+		t.Fatalf("SendInitialPrompt called %d times for empty prompt, want 0", spawn.initialCalls)
+	}
+}
+
+func TestCreate_InitialPrompt_WhitespaceOnly_Skips(t *testing.T) {
+	dir := tempDir(t)
+	spawn := &fakeCreateSpawner{returnSess: session.Session{UUID: "u", Mode: "yolo"}}
+	h := api.CreateSession(&fakeCreateProj{sess: map[string]session.Session{}}, spawn, fakeLookPath{ok: true})
+
+	rec := httptest.NewRecorder()
+	h(rec, createReq(t, map[string]string{"workdir": dir, "initial_prompt": "  \n\t  "}))
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", rec.Code)
+	}
+	if spawn.initialCalls != 0 {
+		t.Fatalf("SendInitialPrompt called %d times for whitespace prompt, want 0", spawn.initialCalls)
+	}
 }
 
 func TestCreate_NameOverride(t *testing.T) {
