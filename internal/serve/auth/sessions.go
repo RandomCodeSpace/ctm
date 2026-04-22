@@ -74,6 +74,14 @@ func (s *Store) Wipe() {
 	s.mu.Unlock()
 }
 
+// Seed inserts a pre-known token → username mapping. Intended only for
+// test seams where the caller injects a fixed token via Options.Token.
+func (s *Store) Seed(token, username string) {
+	s.mu.Lock()
+	s.entries[token] = username
+	s.mu.Unlock()
+}
+
 // SetStaleWindowForTest lets tests force an immediate restat.
 func (s *Store) SetStaleWindowForTest(d time.Duration) {
 	s.staleWindow = d

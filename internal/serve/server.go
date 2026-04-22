@@ -54,9 +54,9 @@ type Options struct {
 	Port    int
 	Version string
 
-	// Token, if non-empty, is used for bearer auth directly; tests use
-	// this seam to avoid touching ~/.config/ctm/serve.token. In
-	// production leave it empty — serve loads auth.TokenPath().
+	// Token, if non-empty, is pre-seeded into the in-memory session store
+	// at startup so tests can authenticate without going through signup/
+	// login. Production code leaves this empty.
 	Token string
 
 	// SessionsPath overrides the path serve watches for the sessions
@@ -118,7 +118,7 @@ type Server struct {
 	// without a signal.
 	runCancel context.CancelFunc
 
-	token      string
+	sessions   *auth.Store
 	hub        *events.Hub
 	proj       *ingest.Projection
 	tailers    *ingest.TailerManager
@@ -151,15 +151,11 @@ func New(opts Options) (*Server, error) {
 		opts.Port = DefaultPort
 	}
 
-	token := opts.Token
-	if token == "" {
-		t, err := auth.LoadToken(auth.TokenPath())
-		if err != nil {
-			return nil, fmt.Errorf(
-				"load serve token: %w (expected at %s; run `ctm doctor` to recreate)",
-				err, auth.TokenPath())
-		}
-		token = t
+	sessions := auth.NewStore()
+	if opts.Token != "" {
+		// Test seam: pre-seed the session store so tests can authenticate
+		// without going through the signup/login flow.
+		sessions.Seed(opts.Token, "test")
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", opts.Port)
@@ -246,7 +242,7 @@ func New(opts Options) (*Server, error) {
 		startedAt:     time.Now(),
 		requestCtx:    reqCtx,
 		requestCancel: reqCancel,
-		token:         token,
+		sessions:      sessions,
 		hub:           hub,
 		proj:          proj,
 		tailers:       ingest.NewTailerManager(logDir, hub),
@@ -472,8 +468,24 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
+	// authHF wraps h so that every request carries a valid session
+	// token (V27). Existing mux.Handle(..., authHF(h)) callsites
+	// don't need changes.
 	authHF := func(h http.HandlerFunc) http.Handler {
-		return auth.Required(s.token, h)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tok := api.BearerFromRequest(r)
+			if tok == "" {
+				writeJSONAuthErr(w, http.StatusUnauthorized, "missing_token")
+				return
+			}
+			user, ok := s.sessions.Lookup(tok)
+			if !ok {
+				writeJSONAuthErr(w, http.StatusUnauthorized, "invalid_token")
+				return
+			}
+			r = r.WithContext(auth.WithUser(r.Context(), user))
+			h(w, r)
+		})
 	}
 
 	// Unauthenticated: liveness only. Registered without a method
@@ -617,6 +629,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 			allowedOrigins = append(allowedOrigins, line)
 		}
 	}
+	// V27 auth routes. /api/auth/status is intentionally unauthenticated
+	// so the UI can probe it from any context. Signup/login are Origin-
+	// gated to prevent CSRF. Logout requires a valid session.
+	mux.Handle("GET /api/auth/status", api.AuthStatus(s.sessions))
+	mux.Handle("POST /api/auth/signup", api.RequireOriginFunc(allowedOrigins, api.AuthSignup(s.sessions)))
+	mux.Handle("POST /api/auth/login", api.RequireOriginFunc(allowedOrigins, api.AuthLogin(s.sessions)))
+	mux.Handle("POST /api/auth/logout", authHF(api.AuthLogout(s.sessions)))
+
 	mux.Handle("POST /api/sessions/{name}/kill",
 		authHF(api.RequireOriginFunc(allowedOrigins, api.Kill(s.sessionStore, s.tmuxClient, s.proj))))
 	mux.Handle("POST /api/sessions/{name}/forget",
@@ -653,6 +673,12 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Placeholder UI at / ; returns 404 for unknown /api/ and /events/
 	// paths so future routes can claim those prefixes cleanly.
 	mux.Handle("/", assetHandler())
+}
+
+func writeJSONAuthErr(w http.ResponseWriter, status int, code string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
 }
 
 // hubStatsAdapter exposes the events.Hub's Stats() to api.Health

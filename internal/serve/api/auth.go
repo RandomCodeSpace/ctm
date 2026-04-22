@@ -180,6 +180,10 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(h[len(prefix):])
 }
 
+// BearerFromRequest is the exported twin of bearerToken, used by
+// internal/serve/server.go's authHF middleware.
+func BearerFromRequest(r *http.Request) string { return bearerToken(r) }
+
 func decodeAuthBody(r *http.Request, w http.ResponseWriter, out *authCredsBody) error {
 	r.Body = http.MaxBytesReader(w, r.Body, authBodyMax)
 	dec := json.NewDecoder(r.Body)
