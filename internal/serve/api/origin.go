@@ -12,6 +12,7 @@ package api
 // legitimate callers.
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -68,10 +69,12 @@ func RequireOrigin(allowed []string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
+			slog.Info("origin rejected", "path", r.URL.Path, "reason", "missing")
 			http.Error(w, "missing Origin", http.StatusForbidden)
 			return
 		}
 		if _, ok := set[origin]; !ok {
+			slog.Info("origin rejected", "path", r.URL.Path, "origin", origin, "reason", "not_in_allowlist")
 			http.Error(w, "disallowed Origin", http.StatusForbidden)
 			return
 		}
