@@ -148,7 +148,8 @@ describe("NewSessionModal", () => {
     await userEvent.click(screen.getByRole("button", { name: /create/i }));
 
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/s/ctm-2"));
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+    const call1 = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(call1[1]?.body))).toEqual({
       workdir: "/ctm",
       name: "ctm-2",
     });
