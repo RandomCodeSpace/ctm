@@ -1,0 +1,204 @@
+package api
+
+// V27 — /api/auth/{status,signup,login,logout}. Spec:
+// docs/superpowers/specs/2026-04-22-V27-single-user-auth-design.md
+
+import (
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"log/slog"
+	"net/http"
+	"regexp"
+	"strings"
+
+	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
+)
+
+var authUsernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{3,32}$`)
+
+const authPasswordMin = 8
+const authBodyMax = 1024
+
+type authCredsBody struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// AuthStatus returns GET /api/auth/status. Never 401s — reports
+// registered+authenticated as booleans so the UI can route.
+func AuthStatus(store *auth.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
+			return
+		}
+		resp := struct {
+			Registered    bool `json:"registered"`
+			Authenticated bool `json:"authenticated"`
+		}{
+			Registered: auth.Exists(),
+		}
+		if tok := bearerToken(r); tok != "" {
+			if _, ok := store.Lookup(tok); ok {
+				resp.Authenticated = true
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// AuthSignup returns POST /api/auth/signup. Refuses if user.json
+// already exists; otherwise creates it, issues a session token,
+// returns 201.
+func AuthSignup(store *auth.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+			return
+		}
+		if auth.Exists() {
+			slog.Info("auth signup reject", "reason", "already_registered")
+			writeInputErr(w, http.StatusConflict, "already_registered",
+				"this instance already has a user; log in instead")
+			return
+		}
+		var body authCredsBody
+		if err := decodeAuthBody(r, w, &body); err != nil {
+			return
+		}
+		if err := validateCreds(body); err != nil {
+			slog.Info("auth signup reject", "reason", err.Error())
+			writeInputErr(w, http.StatusBadRequest, "invalid_body", err.Error())
+			return
+		}
+		enc, err := auth.Hash(body.Password)
+		if err != nil {
+			slog.Error("auth signup hash error", "err", err.Error())
+			writeInputErr(w, http.StatusInternalServerError, "hash_failed", err.Error())
+			return
+		}
+		if err := auth.Save(auth.User{Username: body.Username, Password: enc}); err != nil {
+			slog.Error("auth signup save error", "err", err.Error())
+			writeInputErr(w, http.StatusInternalServerError, "save_failed", err.Error())
+			return
+		}
+		tok, err := store.Create(body.Username)
+		if err != nil {
+			writeInputErr(w, http.StatusInternalServerError, "session_failed", err.Error())
+			return
+		}
+		slog.Info("auth signup ok", "username", body.Username)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"token":    tok,
+			"username": body.Username,
+		})
+	}
+}
+
+// AuthLogin returns POST /api/auth/login.
+func AuthLogin(store *auth.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+			return
+		}
+		var body authCredsBody
+		if err := decodeAuthBody(r, w, &body); err != nil {
+			return
+		}
+		u, err := auth.Load()
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				slog.Info("auth login reject", "reason", "not_registered")
+				writeInputErr(w, http.StatusNotFound, "not_registered",
+					"no user exists yet; sign up first")
+				return
+			}
+			slog.Error("auth login load error", "err", err.Error())
+			writeInputErr(w, http.StatusInternalServerError, "load_failed", err.Error())
+			return
+		}
+		if u.Username != body.Username || !auth.Verify(u.Password, body.Password) {
+			slog.Info("auth login reject", "reason", "invalid_credentials", "attempted_username", body.Username)
+			writeInputErr(w, http.StatusUnauthorized, "invalid_credentials",
+				"username or password does not match")
+			return
+		}
+		tok, err := store.Create(u.Username)
+		if err != nil {
+			writeInputErr(w, http.StatusInternalServerError, "session_failed", err.Error())
+			return
+		}
+		slog.Info("auth login ok", "username", u.Username)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"token":    tok,
+			"username": u.Username,
+		})
+	}
+}
+
+// AuthLogout returns POST /api/auth/logout.
+func AuthLogout(store *auth.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+			return
+		}
+		tok := bearerToken(r)
+		if tok == "" {
+			writeInputErr(w, http.StatusUnauthorized, "missing_token", "")
+			return
+		}
+		user, ok := store.Lookup(tok)
+		if !ok {
+			writeInputErr(w, http.StatusUnauthorized, "invalid_token", "")
+			return
+		}
+		store.Revoke(tok)
+		slog.Info("auth logout", "username", user)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// ---------- helpers --------------------------------------------------------
+
+func bearerToken(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if !strings.HasPrefix(h, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(h[len(prefix):])
+}
+
+func decodeAuthBody(r *http.Request, w http.ResponseWriter, out *authCredsBody) error {
+	r.Body = http.MaxBytesReader(w, r.Body, authBodyMax)
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(out); err != nil {
+		writeInputErr(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return err
+	}
+	return nil
+}
+
+func validateCreds(b authCredsBody) error {
+	if !authUsernameRe.MatchString(b.Username) {
+		return errors.New("username must match ^[A-Za-z0-9._-]{3,32}$")
+	}
+	if len(b.Password) < authPasswordMin {
+		return errors.New("password must be at least 8 characters")
+	}
+	if strings.TrimSpace(b.Password) == "" {
+		return errors.New("password cannot be whitespace only")
+	}
+	return nil
+}
