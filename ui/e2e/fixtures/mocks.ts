@@ -13,6 +13,10 @@ export interface MockOverrides {
   feed?: unknown;
   /** When false, /api/bootstrap returns 401 so the paste screen renders. */
   authenticated?: boolean;
+  /** Controls /api/auth/status `registered` field (default true). */
+  authRegistered?: boolean;
+  /** Controls /api/auth/status `authenticated` field (default true). */
+  authAuthenticated?: boolean;
 }
 
 const defaultSession = {
@@ -81,6 +85,29 @@ export async function installMocks(
     } else if (/\/api\/sessions\/[^/]+\/input$/.test(path)) {
       // V25 session-input default: 204 No Content. Tests override with
       // page.route(...) when they want an error case.
+      return route.fulfill({ status: 204 });
+    } else if (path === "/api/auth/status") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          registered: overrides.authRegistered ?? true,
+          authenticated: overrides.authAuthenticated ?? true,
+        }),
+      });
+    } else if (path === "/api/auth/signup" && route.request().method() === "POST") {
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ token: "test-token", username: "alice" }),
+      });
+    } else if (path === "/api/auth/login" && route.request().method() === "POST") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ token: "test-token", username: "alice" }),
+      });
+    } else if (path === "/api/auth/logout" && route.request().method() === "POST") {
       return route.fulfill({ status: 204 });
     }
     return route.fulfill({ contentType: "application/json", body });
