@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthProvider } from "@/components/AuthProvider";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 import type { ConfigPayload } from "@/hooks/useConfigUpdate";
 
@@ -34,7 +35,9 @@ function renderDrawer(fetchImpl: typeof globalThis.fetch) {
     onClose,
     ...render(
       <QueryClientProvider client={qc}>
-        <SettingsDrawer open onClose={onClose} />
+        <AuthProvider>
+          <SettingsDrawer open onClose={onClose} />
+        </AuthProvider>
       </QueryClientProvider>,
     ),
   };
