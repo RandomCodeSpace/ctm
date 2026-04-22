@@ -138,14 +138,31 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
         onValueChange={(v) => changeTab(v as TabKey)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <TabsList className="h-auto shrink-0 justify-start rounded-none border-b border-border bg-bg px-4 py-0">
-          <TabTrigger value="feed">Feed</TabTrigger>
-          <TabTrigger value="checkpoints">Checkpoints</TabTrigger>
-          <TabTrigger value="subagents">Subagents</TabTrigger>
-          <TabTrigger value="teams">Teams</TabTrigger>
-          <TabTrigger value="pane">Pane</TabTrigger>
-          <TabTrigger value="meta">Meta</TabTrigger>
-        </TabsList>
+        {/* Relative wrapper so the right-edge fade can sit above the
+            scrollable row without consuming pointer events. The fade
+            is purely a visual hint that more tabs exist off-screen at
+            narrow widths; on wide viewports the row fits and the fade
+            sits harmlessly over empty space on the right. */}
+        <div className="relative shrink-0 border-b border-border">
+          <TabsList
+            className={cn(
+              "h-auto w-full flex-nowrap justify-start rounded-none border-none bg-bg px-4 py-0",
+              "overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none]",
+              "[&::-webkit-scrollbar]:hidden",
+            )}
+          >
+            <TabTrigger value="feed">Feed</TabTrigger>
+            <TabTrigger value="checkpoints">Checkpoints</TabTrigger>
+            <TabTrigger value="subagents">Subagents</TabTrigger>
+            <TabTrigger value="teams">Teams</TabTrigger>
+            <TabTrigger value="pane">Pane</TabTrigger>
+            <TabTrigger value="meta">Meta</TabTrigger>
+          </TabsList>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-bg to-transparent"
+          />
+        </div>
 
         <TabsContent value="feed" className="m-0 flex min-h-0 flex-1 flex-col">
           <FeedTab sessionName={name} />
@@ -211,7 +228,10 @@ function TabTrigger({
     <TabsTrigger
       value={value}
       className={cn(
-        "rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-2",
+        // shrink-0 so the tab keeps its intrinsic width when the
+        // parent row is overflow-x-auto (otherwise flex would squeeze
+        // the trailing tabs into nothing instead of scrolling).
+        "shrink-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-2",
         "text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted",
         "data-[state=active]:border-accent-gold data-[state=active]:bg-transparent",
         "data-[state=active]:text-fg data-[state=active]:shadow-none",

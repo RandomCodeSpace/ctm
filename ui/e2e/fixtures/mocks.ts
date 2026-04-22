@@ -97,10 +97,34 @@ export async function installMocks(
   });
 
   await page.route("**/api/sessions**", (route: Route) => {
-    return route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(overrides.sessions ?? [defaultSession]),
-    });
+    const path = new URL(route.request().url()).pathname;
+    // Differentiate the list endpoint from the per-session detail
+    // endpoint. Both share the `/api/sessions` prefix so a single
+    // glob-mock would otherwise return the list payload for
+    // `/api/sessions/alpha` — leaving useSessionDetail with an array
+    // where it expects a Session object, and crashing MetaList /
+    // CostChart on undefined dates. Nested paths like
+    // `/api/sessions/alpha/checkpoints` fall through to the
+    // shape-aware catch-all above.
+    if (path === "/api/sessions") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(overrides.sessions ?? [defaultSession]),
+      });
+    }
+    const m = path.match(/^\/api\/sessions\/([^/]+)$/);
+    if (m) {
+      const name = decodeURIComponent(m[1]);
+      const sessions = (overrides.sessions ?? [defaultSession]) as Array<{
+        name: string;
+      }>;
+      const found = sessions.find((s) => s.name === name) ?? defaultSession;
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(found),
+      });
+    }
+    return route.fallback();
   });
 
   await page.route("**/api/quota", (route: Route) => {
