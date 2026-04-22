@@ -226,6 +226,14 @@ func TmuxConfPath() string {
 	return filepath.Join(Dir(), "tmux.conf")
 }
 
+// AllowedOriginsPath returns the path to the extra-origins file.
+// One origin per line; blank lines and `#`-prefixed lines are ignored.
+// Read by the serve mutation allowlist so mobile / reverse-proxy
+// hostnames persist across reloads without needing env vars.
+func AllowedOriginsPath() string {
+	return filepath.Join(Dir(), "allowed_origins")
+}
+
 // ClaudeOverlayPath returns the path to the optional claude settings overlay.
 // When this file exists, ctm passes --settings <path> to every claude
 // invocation, layering it on top of the user's existing claude settings
