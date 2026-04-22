@@ -41,14 +41,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(() => {
     clearToken();
     setTokenState(null);
-    const next = window.location.pathname + window.location.search;
-    if (window.location.pathname !== "/auth") {
-      window.history.replaceState(
-        {},
-        "",
-        `/auth?next=${encodeURIComponent(next)}`,
-      );
-    }
   }, []);
 
   // Listen to other tabs clearing the token.

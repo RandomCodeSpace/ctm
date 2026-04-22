@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
+import { AuthProvider } from "@/components/AuthProvider";
 import { SignupForm } from "@/routes/SignupForm";
 
 function wrap(ui: React.ReactNode) {
@@ -11,7 +12,9 @@ function wrap(ui: React.ReactNode) {
   });
   return (
     <MemoryRouter>
-      <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+      <QueryClientProvider client={qc}>
+        <AuthProvider>{ui}</AuthProvider>
+      </QueryClientProvider>
     </MemoryRouter>
   );
 }

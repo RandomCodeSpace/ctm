@@ -1,8 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, clearToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
 
 export function useLogout() {
   const qc = useQueryClient();
+  const { signOut } = useAuth();
   return useMutation<void, Error, void>({
     mutationKey: ["auth-logout"],
     mutationFn: async () => {
@@ -13,7 +15,7 @@ export function useLogout() {
       }
     },
     onSettled: () => {
-      clearToken();
+      signOut();
       qc.clear();
     },
   });
