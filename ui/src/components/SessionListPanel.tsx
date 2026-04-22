@@ -36,7 +36,13 @@ export function SessionListPanel({
     <aside
       aria-label="Sessions"
       className={cn(
-        "flex h-full min-h-0 flex-col border-r border-border bg-bg",
+        // On desktop the aside is a fixed-height flex column so the
+        // middle region gets its own scroll; on mobile the page body
+        // is the scroll container, so the aside flows naturally and
+        // the footer sits at the end of the document (reachable in
+        // one continuous scroll, letting the browser URL bar collapse
+        // as the user drags).
+        "flex flex-col border-r border-border bg-bg md:h-full md:min-h-0",
         className,
       )}
     >
@@ -55,7 +61,7 @@ export function SessionListPanel({
         </label>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {isLoading && (
           <div className="space-y-2 p-4">
             <Skeleton className="h-16 w-full" />

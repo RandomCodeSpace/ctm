@@ -24,7 +24,7 @@ export function DoctorPanel() {
   const { data, isLoading, isError, error, refetch, isFetching } = useDoctor();
 
   return (
-    <div className="flex h-screen flex-col bg-bg text-fg">
+    <div className="flex h-dvh flex-col bg-bg text-fg">
       <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-3">
           <Link

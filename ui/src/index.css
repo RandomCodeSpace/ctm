@@ -122,11 +122,15 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Base. */
+/* Base. html + body use `min-height` not `height` so the document can
+ * grow with content and the browser's native scroll (with momentum +
+ * URL-bar auto-collapse on mobile) just works. `height: 100%` here
+ * would pin the body to the viewport, forcing overflow onto an inner
+ * container and losing mobile scroll smoothness. */
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {

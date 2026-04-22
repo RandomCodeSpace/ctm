@@ -21,11 +21,20 @@ import { cn } from "@/lib/utils";
  *   >=768px    list (300px) | SessionDetail (auto-selects latest)
  *   <768px     list-only when no name; detail-only when name is set
  *
- * Height model: root is h-screen (exactly viewport). The middle flex
- * row is flex-1 min-h-0 overflow-hidden so the list pane and the
- * detail pane each own their own scroll container and never push the
- * page height. `min-h-screen` would let the root grow past the
- * viewport, breaking the flex → overflow chain for scroll children.
+ * Height model differs by breakpoint:
+ *
+ *  < md  — the *document body* is the scroll container. Root is
+ *          `min-h-dvh`, header/QuotaStrip flow naturally, list and
+ *          detail panes grow to content height. Browser URL bar
+ *          collapses on scroll the way users expect on mobile, and
+ *          the "Live feed" footer sits at the bottom of the document
+ *          so reaching it is a single continuous scroll.
+ *
+ *  ≥ md  — root is `h-dvh` (exact dynamic viewport). The middle flex
+ *          row is `flex-1 min-h-0 overflow-hidden` so list + detail
+ *          panes each own their own scroll container. Without the
+ *          min-h-0 the flex → overflow chain breaks and children
+ *          can't scroll.
  */
 export function Dashboard() {
   const { name } = useParams<{ name?: string }>();
@@ -57,7 +66,7 @@ export function Dashboard() {
   const detailVisible = Boolean(name);
 
   return (
-    <div className="flex h-screen flex-col bg-bg text-fg">
+    <div className="flex min-h-dvh flex-col bg-bg text-fg md:h-dvh">
       <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-serif text-xl font-bold tracking-tight">ctm</h1>
         <div className="flex items-center gap-1">
@@ -108,7 +117,7 @@ export function Dashboard() {
         <CostChart />
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex flex-1 md:min-h-0 md:overflow-hidden">
         <SessionListPanel
           activeName={name}
           className={cn(
