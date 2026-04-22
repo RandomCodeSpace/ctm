@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -45,28 +46,34 @@ var (
 // mode=yolo + tmux_alive; refuses otherwise with a structured error.
 func Input(src InputSessionSource, tmux InputTmux) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		slog.Info("input request", "session", name, "origin", r.Header.Get("Origin"), "ua", r.Header.Get("User-Agent"))
 		if r.Method != http.MethodPost {
+			slog.Info("input reject", "session", name, "reason", "method_not_allowed")
 			w.Header().Set("Allow", http.MethodPost)
 			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 			return
 		}
-		name := r.PathValue("name")
 		if name == "" {
+			slog.Info("input reject", "reason", "missing_name")
 			writeInputErr(w, http.StatusBadRequest, "invalid_body", "missing session name")
 			return
 		}
 
 		sess, ok := src.Get(name)
 		if !ok {
+			slog.Info("input reject", "session", name, "reason", "session_not_found")
 			writeInputErr(w, http.StatusNotFound, "session_not_found", "no session named "+name)
 			return
 		}
 		if sess.Mode != "yolo" {
+			slog.Info("input reject", "session", name, "reason", "not_yolo", "mode", sess.Mode)
 			writeInputErr(w, http.StatusForbidden, "not_yolo",
 				"input is only available on yolo-mode sessions")
 			return
 		}
 		if !src.TmuxAlive(name) {
+			slog.Info("input reject", "session", name, "reason", "tmux_dead")
 			writeInputErr(w, http.StatusConflict, "tmux_dead",
 				"session tmux has exited")
 			return
@@ -75,21 +82,25 @@ func Input(src InputSessionSource, tmux InputTmux) http.HandlerFunc {
 		var body inputReq
 		r.Body = http.MaxBytesReader(w, r.Body, 1024)
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			slog.Info("input reject", "session", name, "reason", "invalid_body", "err", err.Error())
 			writeInputErr(w, http.StatusBadRequest, "invalid_body", err.Error())
 			return
 		}
 
 		keys, herr := expandInput(body)
 		if herr != nil {
+			slog.Info("input reject", "session", name, "reason", herr.Error())
 			writeInputErr(w, http.StatusBadRequest, herr.Error(), herr.Error())
 			return
 		}
 
 		target := fmt.Sprintf("%s:0.0", sess.Name)
 		if err := tmux.SendKeys(target, keys); err != nil {
+			slog.Error("input send_failed", "session", name, "err", err.Error())
 			writeInputErr(w, http.StatusInternalServerError, "send_failed", err.Error())
 			return
 		}
+		slog.Info("input ok", "session", name, "preset", body.Preset, "text_len", len(body.Text))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
