@@ -595,7 +595,17 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// V23 mutation endpoints: bearer + Origin-allowlist + type-to-confirm
 	// (for destructive ones) per docs/v02/V23-mutation-auth.md (A+B+D).
+	// Extra origins for reverse-proxy / tunnel deployments (e.g.
+	// https://dev.example.com) can be added via CTM_ALLOWED_ORIGINS as
+	// a comma-separated list. The loopback pair is always included.
 	allowedOrigins := api.DefaultAllowedOrigins(s.opts.Port)
+	if extra := os.Getenv("CTM_ALLOWED_ORIGINS"); extra != "" {
+		for _, o := range strings.Split(extra, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				allowedOrigins = append(allowedOrigins, o)
+			}
+		}
+	}
 	mux.Handle("POST /api/sessions/{name}/kill",
 		authHF(api.RequireOriginFunc(allowedOrigins, api.Kill(s.sessionStore, s.tmuxClient, s.proj))))
 	mux.Handle("POST /api/sessions/{name}/forget",
