@@ -24,7 +24,6 @@ function makeResponse(partial: Partial<SearchResponse>): SearchResponse {
   return {
     query: partial.query ?? "needle",
     matches: partial.matches ?? [],
-    scanned_files: partial.scanned_files ?? 1,
     truncated: partial.truncated ?? false,
   };
 }

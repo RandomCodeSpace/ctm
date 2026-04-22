@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 /**
- * V19 Slice 1 grep-style search response. Wire shape mirrors
+ * V19 search response — FTS5 index query. Wire shape mirrors
  * internal/serve/api/search.go:SearchResponse exactly.
  */
 export interface SearchMatch {
@@ -16,17 +16,16 @@ export interface SearchMatch {
 export interface SearchResponse {
   query: string;
   matches: SearchMatch[];
-  scanned_files: number;
   truncated: boolean;
 }
 
-const MIN_Q = 2;
+const MIN_Q = 3;
 
 /**
- * Palette search hook. Gated on q.length >= 2 (mirrors the handler's
- * own 2..256 range so we don't issue guaranteed-400s). `keepPreviousData`
- * keeps the old result list visible while the next query flies so the
- * palette doesn't flash empty between keystrokes.
+ * Palette search hook. Gated on q.length >= 3 (matches the FTS5 trigram
+ * tokenizer's minimum useful query length and the handler's 3..256
+ * range). `keepPreviousData` keeps the old list visible while the next
+ * query flies so the palette doesn't flash empty between keystrokes.
  */
 export function useSearch(q: string, sessionName?: string) {
   const trimmed = q.trim();

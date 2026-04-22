@@ -8,6 +8,12 @@ UI_DIR        := ui
 UI_DIST       := $(UI_DIR)/dist
 EMBED_DIST    := internal/serve/dist
 
+# V19 slice 3 requires SQLite FTS5. mattn/go-sqlite3 compiles FTS5 in
+# only when the sqlite_fts5 build tag is set; applied to every go
+# build / test / install invocation below. Binaries built without it
+# will panic at boot on "no such module: fts5".
+GO_TAGS       := sqlite_fts5
+
 .PHONY: ui build dev clean help e2e regression
 
 help:
@@ -30,7 +36,7 @@ ui:
 
 build: ui
 	@echo "==> go build"
-	go build -trimpath ./...
+	go build -trimpath -tags $(GO_TAGS) ./...
 
 # Dev: run pnpm dev (Vite proxies to :37778) and go run . serve in parallel.
 # Trap SIGINT so Ctrl-C tears down both.
@@ -62,11 +68,11 @@ e2e:
 # it does not get replaced. See ui/e2e/README.md.
 regression:
 	@echo "==> go build ./..."
-	go build ./...
+	go build -tags $(GO_TAGS) ./...
 	@echo "==> go test ./..."
-	go test ./...
+	go test -tags $(GO_TAGS) ./...
 	@echo "==> go test -race ./internal/serve/..."
-	go test -race ./internal/serve/...
+	go test -race -tags $(GO_TAGS) ./internal/serve/...
 	@echo "==> govulncheck ./..."
 	govulncheck ./...
 	@echo "==> pnpm -C ui tsc --noEmit"

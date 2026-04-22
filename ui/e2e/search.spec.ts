@@ -40,7 +40,6 @@ test.describe("SearchPalette", () => {
         body: JSON.stringify({
           query: "needle",
           matches: fixtureMatches,
-          scanned_files: 5,
           truncated: false,
         }),
       }),

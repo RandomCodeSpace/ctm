@@ -68,7 +68,7 @@ export function SearchPalette({
   const matches: SearchMatch[] = data?.matches ?? [];
   const truncated = Boolean(data?.truncated);
   const trimmed = debounced.trim();
-  const hasQuery = trimmed.length >= 2;
+  const hasQuery = trimmed.length >= 3;
   const showEmpty = hasQuery && !isFetching && matches.length === 0;
 
   // Clamp the active index whenever the list grows/shrinks.

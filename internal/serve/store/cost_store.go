@@ -128,7 +128,17 @@ CREATE TABLE IF NOT EXISTS cost_points(
 );
 CREATE INDEX IF NOT EXISTS cost_points_session_ts ON cost_points(session, ts);
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-INSERT OR IGNORE INTO schema_meta(key, value) VALUES('version', '1');
+INSERT OR IGNORE INTO schema_meta(key, value) VALUES('version', '2');
+
+-- V19 slice 3 (v0.3): FTS5 index over tool_call payloads.
+-- Trigram tokenizer so queries like "needle" match inside
+-- tokens like "has-needle-row" without needing explicit wildcards.
+-- Wiped on every boot; the tailer's replay (offset starts at 0)
+-- repopulates it via the tool_call hub subscriber.
+CREATE VIRTUAL TABLE IF NOT EXISTS tool_calls_fts USING fts5(
+  session, ts UNINDEXED, tool UNINDEXED, content,
+  tokenize = 'trigram'
+);
 `
 
 func applySchema(db *sql.DB) error {
@@ -143,6 +153,13 @@ func applySchema(db *sql.DB) error {
 	}
 	if _, err := db.Exec(schemaSQL); err != nil {
 		return fmt.Errorf("schema DDL: %w", err)
+	}
+	// V19 slice 3: the FTS index is rebuilt on each boot by the
+	// tailer's offset-0 replay feeding the tool_call subscriber, so
+	// we start from an empty table to avoid accumulating duplicates
+	// across restarts.
+	if _, err := db.Exec("DELETE FROM tool_calls_fts;"); err != nil {
+		return fmt.Errorf("wipe fts: %w", err)
 	}
 	return nil
 }

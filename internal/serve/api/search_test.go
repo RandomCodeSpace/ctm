@@ -2,44 +2,60 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
-func seedSearchLogs(t *testing.T, dir string, files map[string][]string) {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	for name, lines := range files {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-			t.Fatalf("write %s: %v", p, err)
-		}
-	}
+// fakeSearchSource is an in-memory SearchSource for tests.
+type fakeSearchSource struct {
+	hits      []SearchHit
+	truncated bool
+	err       error
+	// Record the last call arguments so tests can assert plumbing.
+	lastQ, lastSess string
+	lastLimit       int
 }
 
-func TestSearch_FindsSubstringMatchesWithSnippet(t *testing.T) {
-	dir := t.TempDir()
-	seedSearchLogs(t, dir, map[string][]string{
-		"11111111-0000-0000-0000-000000000001.jsonl": {
-			`{"ts":"2026-04-21T10:00:00Z","tool":"Bash","cmd":"echo hello-needle-world"}`,
-			`{"ts":"2026-04-21T10:00:01Z","tool":"Read","path":"/tmp/foo"}`,
+func (f *fakeSearchSource) SearchFTS(q, sess string, limit int) ([]SearchHit, bool, error) {
+	f.lastQ, f.lastSess, f.lastLimit = q, sess, limit
+	if f.err != nil {
+		return nil, false, f.err
+	}
+	// Respect the limit so the handler's truncated flag stays
+	// driven by the store, not the handler.
+	n := len(f.hits)
+	if n > limit {
+		n = limit
+	}
+	return f.hits[:n], f.truncated, nil
+}
+
+// fakeSessionResolver implements SessionNameResolver for tests.
+type fakeSessionResolver struct{ m map[string]string }
+
+func (f fakeSessionResolver) ResolveSessionName(name string) (string, bool) {
+	u, ok := f.m[name]
+	return u, ok && u != ""
+}
+
+func TestSearch_ReturnsIndexHits(t *testing.T) {
+	ts := time.Date(2026, 4, 21, 16, 28, 0, 0, time.UTC)
+	src := &fakeSearchSource{
+		hits: []SearchHit{
+			{Session: "alpha", TS: ts, Tool: "Bash", Snippet: "echo hello-needle-world"},
+			{Session: "beta", TS: ts.Add(time.Minute), Tool: "Grep", Snippet: "pattern=needle"},
 		},
-		"22222222-0000-0000-0000-000000000002.jsonl": {
-			`{"ts":"2026-04-21T11:00:00Z","tool":"Grep","pattern":"needle"}`,
-		},
-	})
-	resolver := fakeResolver{m: map[string]string{
-		"11111111-0000-0000-0000-000000000001": "alpha",
-		"22222222-0000-0000-0000-000000000002": "beta",
+	}
+	resolver := fakeSessionResolver{m: map[string]string{
+		"alpha": "11111111-0000-0000-0000-000000000001",
+		"beta":  "22222222-0000-0000-0000-000000000002",
 	}}
 
-	h := Search(dir, resolver)
+	h := Search(src, resolver)
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=needle", nil)
 	rr := httptest.NewRecorder()
 	h(rr, req)
@@ -54,82 +70,73 @@ func TestSearch_FindsSubstringMatchesWithSnippet(t *testing.T) {
 	if resp.Query != "needle" {
 		t.Errorf("query=%q want needle", resp.Query)
 	}
-	if resp.ScannedFiles != 2 {
-		t.Errorf("scanned_files=%d want 2", resp.ScannedFiles)
-	}
 	if len(resp.Matches) != 2 {
-		t.Fatalf("matches=%d want 2 (%v)", len(resp.Matches), resp.Matches)
+		t.Fatalf("matches=%d want 2", len(resp.Matches))
 	}
-	// Snippet should contain the substring.
+	if resp.Matches[0].UUID == "" || resp.Matches[1].UUID == "" {
+		t.Errorf("uuid not resolved: %+v", resp.Matches)
+	}
 	for _, m := range resp.Matches {
-		if !strings.Contains(m.Snippet, "needle") {
-			t.Errorf("snippet %q missing query", m.Snippet)
+		if !strings.Contains(strings.ToLower(m.Snippet), "needle") {
+			t.Errorf("snippet missing query: %q", m.Snippet)
 		}
-		if m.UUID == "" {
-			t.Errorf("uuid empty")
+		if m.TS == "" {
+			t.Errorf("ts empty: %+v", m)
 		}
+	}
+	if src.lastQ != "needle" {
+		t.Errorf("store saw q=%q want needle", src.lastQ)
 	}
 }
 
-func TestSearch_SessionFilter(t *testing.T) {
-	dir := t.TempDir()
-	seedSearchLogs(t, dir, map[string][]string{
-		"aaaaaaaa-0000-0000-0000-000000000001.jsonl": {
-			`{"ts":"2026-04-21T10:00:00Z","tool":"Bash","cmd":"needle-one"}`,
+func TestSearch_PassesSessionFilter(t *testing.T) {
+	src := &fakeSearchSource{
+		hits: []SearchHit{
+			{Session: "beta", TS: time.Now().UTC(), Tool: "Bash", Snippet: "hit"},
 		},
-		"bbbbbbbb-0000-0000-0000-000000000002.jsonl": {
-			`{"ts":"2026-04-21T11:00:00Z","tool":"Bash","cmd":"needle-two"}`,
-		},
-	})
-	resolver := fakeResolver{m: map[string]string{
-		"aaaaaaaa-0000-0000-0000-000000000001": "alpha",
-		"bbbbbbbb-0000-0000-0000-000000000002": "beta",
-	}}
-	h := Search(dir, resolver)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/search?q=needle&session=beta", nil)
+	}
+	h := Search(src, fakeSessionResolver{})
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=nee&session=beta", nil)
 	rr := httptest.NewRecorder()
 	h(rr, req)
+
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status=%d", rr.Code)
 	}
-	var resp SearchResponse
-	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
-	if resp.ScannedFiles != 1 {
-		t.Errorf("scanned_files=%d want 1 (session filter)", resp.ScannedFiles)
-	}
-	if len(resp.Matches) != 1 || resp.Matches[0].Session != "beta" {
-		t.Errorf("matches=%v want 1 from beta", resp.Matches)
+	if src.lastSess != "beta" {
+		t.Errorf("store saw session=%q want beta", src.lastSess)
 	}
 }
 
-func TestSearch_TruncationFlag(t *testing.T) {
-	dir := t.TempDir()
-	lines := make([]string, 0, 10)
-	for i := 0; i < 10; i++ {
-		lines = append(lines, `{"ts":"2026-04-21T10:00:00Z","tool":"Bash","cmd":"has-needle-row"}`)
+func TestSearch_PropagatesTruncated(t *testing.T) {
+	src := &fakeSearchSource{
+		hits: []SearchHit{
+			{Session: "a", TS: time.Now().UTC(), Tool: "Bash", Snippet: "one"},
+			{Session: "a", TS: time.Now().UTC(), Tool: "Bash", Snippet: "two"},
+		},
+		truncated: true,
 	}
-	seedSearchLogs(t, dir, map[string][]string{
-		"cccccccc-0000-0000-0000-000000000003.jsonl": lines,
-	})
-	h := Search(dir, fakeResolver{m: map[string]string{"cccccccc-0000-0000-0000-000000000003": "gamma"}})
-	req := httptest.NewRequest(http.MethodGet, "/api/search?q=needle&limit=3", nil)
+	h := Search(src, fakeSessionResolver{})
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=nee&limit=1", nil)
 	rr := httptest.NewRecorder()
 	h(rr, req)
 
 	var resp SearchResponse
 	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
-	if len(resp.Matches) != 3 {
-		t.Errorf("matches=%d want 3", len(resp.Matches))
-	}
 	if !resp.Truncated {
 		t.Errorf("truncated=false want true")
+	}
+	if len(resp.Matches) != 1 {
+		t.Errorf("matches=%d want 1 (limit)", len(resp.Matches))
+	}
+	if src.lastLimit != 1 {
+		t.Errorf("store saw limit=%d want 1", src.lastLimit)
 	}
 }
 
 func TestSearch_BadQuery400(t *testing.T) {
-	h := Search(t.TempDir(), nil)
-	for _, q := range []string{"", "x"} {
+	h := Search(&fakeSearchSource{}, fakeSessionResolver{})
+	for _, q := range []string{"", "x", "ab"} {
 		req := httptest.NewRequest(http.MethodGet, "/api/search?q="+q, nil)
 		rr := httptest.NewRecorder()
 		h(rr, req)
@@ -139,23 +146,35 @@ func TestSearch_BadQuery400(t *testing.T) {
 	}
 }
 
-func TestSearch_MissingDirReturnsEmpty(t *testing.T) {
-	h := Search(filepath.Join(t.TempDir(), "does-not-exist"), nil)
-	req := httptest.NewRequest(http.MethodGet, "/api/search?q=needle", nil)
+func TestSearch_LimitClampedToMax(t *testing.T) {
+	src := &fakeSearchSource{}
+	h := Search(src, fakeSessionResolver{})
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=nee&limit=100000", nil)
 	rr := httptest.NewRecorder()
 	h(rr, req)
+
 	if rr.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("status=%d", rr.Code)
 	}
-	var resp SearchResponse
-	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
-	if len(resp.Matches) != 0 || resp.ScannedFiles != 0 {
-		t.Errorf("expected empty response, got %+v", resp)
+	if src.lastLimit != searchMaxLimit {
+		t.Errorf("limit=%d want %d", src.lastLimit, searchMaxLimit)
+	}
+}
+
+func TestSearch_500OnStoreError(t *testing.T) {
+	src := &fakeSearchSource{err: errors.New("fts locked")}
+	h := Search(src, fakeSessionResolver{})
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=nee", nil)
+	rr := httptest.NewRecorder()
+	h(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("status=%d want 500", rr.Code)
 	}
 }
 
 func TestSearch_405OnPost(t *testing.T) {
-	h := Search(t.TempDir(), nil)
+	h := Search(&fakeSearchSource{}, fakeSessionResolver{})
 	req := httptest.NewRequest(http.MethodPost, "/api/search?q=needle", nil)
 	rr := httptest.NewRecorder()
 	h(rr, req)

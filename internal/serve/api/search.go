@@ -1,21 +1,27 @@
 package api
 
+// V19 slice 3: /api/search is now backed by the FTS5 index maintained
+// in internal/serve/store. The handler no longer walks *.jsonl files
+// — queries hit the index directly. Trigram tokenization means the
+// minimum query length bumps from 2 to 3 chars.
+//
 // Wiring (central, server.go):
-//   mux.Handle("GET /api/search", authHF(api.Search(s.logDir, logsUUIDResolver{proj: s.proj})))
+//   mux.Handle("GET /api/search", authHF(api.Search(searchSourceAdapter{s.cost}, logsUUIDResolver{proj: s.proj})))
 
 import (
-	"bufio"
-	"encoding/json"
+	"errors"
 	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"sync"
+	"time"
 )
 
-// UUIDNameResolver is already defined in logs_usage.go (V21) —
-// satisfied by serve.logsUUIDResolver. Reused here.
+// SessionNameResolver reverse-maps session name → log UUID. Satisfied
+// by serve.logsUUIDResolver. Kept separate from UUIDNameResolver so
+// callers can depend on only the direction they need.
+type SessionNameResolver interface {
+	ResolveSessionName(name string) (uuid string, ok bool)
+}
+
+var errNotPositiveInt = errors.New("not a positive int")
 
 // SearchMatch is one hit in the search response.
 type SearchMatch struct {
@@ -28,24 +34,42 @@ type SearchMatch struct {
 
 // SearchResponse wraps matches with scan stats for the UI.
 type SearchResponse struct {
-	Query        string        `json:"query"`
-	Matches      []SearchMatch `json:"matches"`
-	ScannedFiles int           `json:"scanned_files"`
-	Truncated    bool          `json:"truncated"`
+	Query     string        `json:"query"`
+	Matches   []SearchMatch `json:"matches"`
+	Truncated bool          `json:"truncated"`
+}
+
+// SearchSource is the persistence seam — in production it's the FTS5
+// store; tests fake it with an in-memory slice.
+type SearchSource interface {
+	SearchFTS(q, sessionFilter string, limit int) ([]SearchHit, bool, error)
+}
+
+// SearchHit mirrors store.SearchMatch in wire-neutral form so the api
+// package doesn't depend on the store package.
+type SearchHit struct {
+	Session string
+	TS      time.Time
+	Tool    string
+	Snippet string
 }
 
 const (
-	searchMinLen   = 2
+	searchMinLen   = 3
 	searchMaxLen   = 256
 	searchMaxLimit = 500
 	searchDefLimit = 100
-	snippetHalf    = 30
-	maxLineBytes   = 1 << 20 // 1 MiB, matches tailer
 )
 
-// Search returns a handler that scans *.jsonl files under logDir for
-// substring hits against q. Slice 1 of V19 — regex and FTS5 come later.
-func Search(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
+// Search returns a handler that queries the FTS5 index for substring
+// hits against q. Response shape matches V19 slice 1 — UUID is
+// resolved from the session name at query time.
+func Search(src SearchSource, resolver SessionNameResolver) http.HandlerFunc {
+	// Build an inverse name → uuid map once per request (via a
+	// resolver-scan closure) so Search can stamp the UUID field.
+	// Resolver walks via (uuid → name); we keep the call site cheap
+	// by doing an O(n) scan on cache miss. For v0.3 the session
+	// count is small (<100) so this is fine.
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
@@ -54,13 +78,13 @@ func Search(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 		}
 		q := r.URL.Query().Get("q")
 		if len(q) < searchMinLen || len(q) > searchMaxLen {
-			http.Error(w, "q must be 2..256 chars", http.StatusBadRequest)
+			http.Error(w, "q must be 3..256 chars", http.StatusBadRequest)
 			return
 		}
 		sessionFilter := r.URL.Query().Get("session")
 		limit := searchDefLimit
 		if v := r.URL.Query().Get("limit"); v != "" {
-			if n, err := parsePositiveInt(v); err == nil {
+			if n, err := parseSearchPositiveInt(v); err == nil {
 				limit = n
 			}
 		}
@@ -68,144 +92,45 @@ func Search(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 			limit = searchMaxLimit
 		}
 
-		entries, err := os.ReadDir(logDir)
+		hits, truncated, err := src.SearchFTS(q, sessionFilter, limit)
 		if err != nil {
-			// Missing dir is treated as empty — the UI shouldn't blow up
-			// before the first session ever runs.
-			if os.IsNotExist(err) {
-				writeJSON(w, http.StatusOK, SearchResponse{Query: q, Matches: []SearchMatch{}})
-				return
-			}
-			http.Error(w, "read log dir", http.StatusInternalServerError)
+			http.Error(w, "search: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Pre-resolve file list, with session-filter short-circuit when set.
-		type job struct {
-			path string
-			uuid string
-			name string
-		}
-		var jobs []job
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
-				continue
+		matches := make([]SearchMatch, 0, len(hits))
+		uuidOf := map[string]string{}
+		for _, h := range hits {
+			uuid, ok := uuidOf[h.Session]
+			if !ok && resolver != nil {
+				uuid, _ = resolver.ResolveSessionName(h.Session)
+				uuidOf[h.Session] = uuid
 			}
-			uuid := strings.TrimSuffix(e.Name(), ".jsonl")
-			name := ""
-			if resolver != nil {
-				name, _ = resolver.ResolveUUID(uuid)
+			m := SearchMatch{
+				Session: h.Session,
+				UUID:    uuid,
+				Tool:    h.Tool,
+				Snippet: h.Snippet,
 			}
-			if sessionFilter != "" && name != sessionFilter {
-				continue
-			}
-			jobs = append(jobs, job{
-				path: filepath.Join(logDir, e.Name()),
-				uuid: uuid,
-				name: name,
-			})
-		}
-
-		// Worker pool over files. Slice 1: single pass, no early-abort via
-		// ctx — handlers inherit request ctx and the OS cancels on client
-		// disconnect via the file close path.
-		workers := runtime.GOMAXPROCS(0)
-		if workers > len(jobs) {
-			workers = len(jobs)
-		}
-		if workers < 1 {
-			workers = 1
-		}
-		jobCh := make(chan job)
-		resCh := make(chan SearchMatch, 256)
-		var wg sync.WaitGroup
-		for i := 0; i < workers; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for j := range jobCh {
-					scanFile(j.path, j.uuid, j.name, q, resCh)
-				}
-			}()
-		}
-		go func() {
-			for _, j := range jobs {
-				jobCh <- j
-			}
-			close(jobCh)
-			wg.Wait()
-			close(resCh)
-		}()
-
-		matches := make([]SearchMatch, 0, limit)
-		truncated := false
-		for m := range resCh {
-			if len(matches) >= limit {
-				truncated = true
-				// Keep draining so workers finish, but stop appending.
-				continue
+			if !h.TS.IsZero() {
+				m.TS = h.TS.Format(time.RFC3339Nano)
 			}
 			matches = append(matches, m)
 		}
 
 		writeJSON(w, http.StatusOK, SearchResponse{
-			Query:        q,
-			Matches:      matches,
-			ScannedFiles: len(jobs),
-			Truncated:    truncated,
+			Query:     q,
+			Matches:   matches,
+			Truncated: truncated,
 		})
 	}
 }
 
-// scanFile emits one match per matching line. Slice 1 behaviour: plain
-// substring match with a 60-char snippet centered on the hit.
-func scanFile(path, uuid, session, q string, out chan<- SearchMatch) {
-	f, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
-	for sc.Scan() {
-		line := sc.Text()
-		idx := strings.Index(line, q)
-		if idx < 0 {
-			continue
-		}
-		// Parse just enough JSON for ts/tool — best-effort only. Rows
-		// that don't parse still count as hits (the snippet is what the
-		// user wants to see).
-		var row struct {
-			TS   string `json:"ts"`
-			Tool string `json:"tool"`
-		}
-		_ = json.Unmarshal([]byte(line), &row)
-
-		start := idx - snippetHalf
-		if start < 0 {
-			start = 0
-		}
-		end := idx + len(q) + snippetHalf
-		if end > len(line) {
-			end = len(line)
-		}
-		out <- SearchMatch{
-			Session: session,
-			UUID:    uuid,
-			TS:      row.TS,
-			Tool:    row.Tool,
-			Snippet: line[start:end],
-		}
-	}
-}
-
-func parsePositiveInt(s string) (int, error) {
+func parseSearchPositiveInt(s string) (int, error) {
 	n := 0
 	for _, c := range s {
 		if c < '0' || c > '9' {
-			return 0, errNotInt
+			return 0, errNotPositiveInt
 		}
 		n = n*10 + int(c-'0')
 		if n > 1<<20 {
@@ -213,13 +138,7 @@ func parsePositiveInt(s string) (int, error) {
 		}
 	}
 	if n <= 0 {
-		return 0, errNotInt
+		return 0, errNotPositiveInt
 	}
 	return n, nil
 }
-
-var errNotInt = &apiError{msg: "not a positive int"}
-
-type apiError struct{ msg string }
-
-func (e *apiError) Error() string { return e.msg }

@@ -324,6 +324,19 @@ func (s *Server) Run(ctx context.Context) error {
 		store.SubscribeQuotaWriter(costCtx, s.hub, s.cost, nil)
 	}()
 
+	// V19 slice 3 FTS subscriber: indexes every tool_call payload into
+	// the SQLite FTS5 table. OpenCostStore wipes the index on boot, so
+	// the tailer's offset-0 replay repopulates it cleanly.
+	ftsCtx, ftsCancel := context.WithCancel(ctx)
+	defer ftsCancel()
+	ftsDone := make(chan struct{})
+	go func() {
+		defer close(ftsDone)
+		if idx, ok := s.cost.(store.ToolCallIndexer); ok {
+			store.SubscribeToolCallWriter(ftsCtx, s.hub, idx, nil)
+		}
+	}()
+
 	// Tailer adoption: scan the JSONL log directory and spawn a tailer
 	// for every UUID we find a log file for. The log files are the
 	// ground truth (claude writes them via the log-tool-use hook
@@ -414,6 +427,8 @@ func (s *Server) Run(ctx context.Context) error {
 		<-whDone
 		costCancel()
 		<-costDone
+		ftsCancel()
+		<-ftsDone
 		_ = s.cost.Close()
 		s.tailers.StopAll()
 		if errors.Is(err, http.ErrServerClosed) {
@@ -440,6 +455,8 @@ func (s *Server) Run(ctx context.Context) error {
 		<-whDone
 		costCancel()
 		<-costDone
+		ftsCancel()
+		<-ftsDone
 		_ = s.cost.Close()
 		s.tailers.StopAll()
 		err := <-serveDone
@@ -523,9 +540,15 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Read-only — no deletion verbs on this endpoint.
 	mux.Handle("GET /api/logs/usage", authHF(api.LogsUsage(s.logDir, logsUUIDResolver{proj: s.proj})))
 
-	// V19 full-text search (slice 1): grep over *.jsonl under logDir.
-	// Slice 2 (UI bar) consumes this; slice 3 (FTS5) is deferred to v0.3.
-	mux.Handle("GET /api/search", authHF(api.Search(s.logDir, logsUUIDResolver{proj: s.proj})))
+	// V19 slice 3 (v0.3): FTS5-backed full-text search over indexed
+	// tool_call content. Rebuilt on each boot from the tailer's
+	// offset-0 replay; live rows appended via the tool_call hub
+	// subscriber. Min query length bumps to 3 chars (trigram
+	// tokenizer).
+	mux.Handle("GET /api/search", authHF(api.Search(
+		searchSourceAdapter{s.cost},
+		sessionNameResolver{proj: s.proj},
+	)))
 
 	// V13 cumulative cost chart. Pulls from the SQLite cost store; adapter
 	// below copies store.CostPoint → api.CostPoint to keep the api package
@@ -745,6 +768,44 @@ func (a quotaSourceAdapter) Snapshot() api.QuotaSnapshot {
 // back via ~/.claude/projects/*/<uuid>.jsonl so transcripts from
 // previous claude sessions in the same workdir still surface with
 // their tmux session name.
+// searchSourceAdapter implements api.SearchSource on top of
+// store.SearchStore (sqliteCostStore satisfies both CostStore and
+// SearchStore via the shared DB handle).
+type searchSourceAdapter struct{ s store.CostStore }
+
+func (a searchSourceAdapter) SearchFTS(q, sessionFilter string, limit int) ([]api.SearchHit, bool, error) {
+	ss, ok := a.s.(store.SearchStore)
+	if !ok {
+		return nil, false, nil
+	}
+	hits, truncated, err := ss.SearchFTS(q, sessionFilter, limit)
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]api.SearchHit, len(hits))
+	for i, h := range hits {
+		out[i] = api.SearchHit(h)
+	}
+	return out, truncated, nil
+}
+
+// sessionNameResolver reverse-maps session name → log UUID for the
+// V19 slice-3 search handler. logsUUIDResolver already does the
+// forward direction; this type walks the projection's session list
+// for the reverse (O(n), n ≤ ~100 in practice).
+type sessionNameResolver struct{ proj *ingest.Projection }
+
+func (r sessionNameResolver) ResolveSessionName(name string) (string, bool) {
+	if r.proj == nil || name == "" {
+		return "", false
+	}
+	sess, ok := r.proj.Get(name)
+	if !ok {
+		return "", false
+	}
+	return sess.UUID, sess.UUID != ""
+}
+
 // costSourceAdapter implements api.CostSource on top of store.CostStore.
 // The structs have identical field shapes so the conversion is direct.
 type costSourceAdapter struct{ s store.CostStore }

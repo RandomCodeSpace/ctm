@@ -43,6 +43,45 @@ export async function installMocks(
 ): Promise<void> {
   const authed = overrides.authenticated !== false;
 
+  // Catch-all for unmocked /api/** endpoints. Registered first so the
+  // specific mocks below override it (Playwright matches the most
+  // recently registered route). Returns a safe empty payload shaped by
+  // route — crucially NOT 401 — because any 401 bubbles up as
+  // UnauthorizedError and triggers AuthProvider.signOut(), which clears
+  // the bearer token and boots the test back to the paste screen. That
+  // masks every subsequent assertion and makes the suite extremely
+  // brittle to new endpoints (e.g. V13's /api/cost was silently dropping
+  // all tests into the paste screen until this catch-all was added).
+  await page.route("**/api/**", (route: Route) => {
+    const url = route.request().url();
+    const path = new URL(url).pathname;
+    let body = "{}";
+    if (path.startsWith("/api/cost")) {
+      body = JSON.stringify({
+        window: "day",
+        points: [],
+        totals: { input: 0, output: 0, cache: 0, cost_usd_micros: 0 },
+      });
+    } else if (path.startsWith("/api/search")) {
+      body = JSON.stringify({ query: "", matches: [], truncated: false });
+    } else if (path.endsWith("/subagents")) {
+      body = JSON.stringify({ subagents: [] });
+    } else if (path.endsWith("/teams")) {
+      body = JSON.stringify({ teams: [] });
+    } else if (path.endsWith("/checkpoints")) {
+      body = "[]";
+    } else if (path.endsWith("/feed/history")) {
+      body = JSON.stringify({ events: [], has_more: false });
+    } else if (path === "/api/logs/usage") {
+      body = JSON.stringify({ dir: "", total_bytes: 0, files: [] });
+    } else if (path === "/api/doctor") {
+      body = JSON.stringify({ checks: [], ok: true });
+    } else if (path === "/api/config") {
+      body = "{}";
+    }
+    return route.fulfill({ contentType: "application/json", body });
+  });
+
   await page.route("**/api/bootstrap", (route: Route) => {
     if (!authed) return route.fulfill({ status: 401 });
     return route.fulfill({
