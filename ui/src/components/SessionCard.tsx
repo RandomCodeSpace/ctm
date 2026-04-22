@@ -103,8 +103,12 @@ export function SessionCard({ session, active }: SessionCardProps) {
           {shortenPath(session.workdir, 3)}
         </code>
         <div className="flex shrink-0 items-center gap-3 text-fg-dim">
+          {/* Context % is already visualised by the 2px progress bar
+              glued to the card's bottom edge. Suppress the numeric
+              echo on mobile to free space for the more useful ⏵ last
+              tool call timestamp. */}
           {typeof session.context_pct === "number" && (
-            <span className="font-mono tabular-nums">
+            <span className="hidden font-mono tabular-nums sm:inline">
               {Math.round(session.context_pct)}%
             </span>
           )}
@@ -119,10 +123,14 @@ export function SessionCard({ session, active }: SessionCardProps) {
               {relativeTime(lastTC)}
             </time>
           )}
+          {/* When we already have a ⏵ last-tool-call, the last-attach
+              time is duplicate-ish secondary info; hide on mobile.
+              When there's no tool call yet (fresh session) we keep it
+              at every width because it's the only age signal. */}
           <time
             dateTime={primary}
             title={`${primaryLabel} ${primary}`}
-            className={cn(lastTC && "text-fg-muted")}
+            className={cn(lastTC && "hidden text-fg-muted sm:inline")}
           >
             {lastTC ? relativeTime(lastAttach) : relativeTime(primary)}
           </time>
