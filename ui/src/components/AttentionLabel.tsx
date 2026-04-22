@@ -3,12 +3,17 @@ import { cn } from "@/lib/utils";
 
 const HUMAN: Record<string, string> = {
   error_burst: "Error burst",
+  stuck: "Idle",
   stalled: "Stalled",
   quota_low: "Quota low",
-  permission_request: "Permission",
+  quota_high: "Quota high",
   context_high: "Context high",
+  context_imminent: "Context full",
+  permission_request: "Permission",
   long_session: "Long session",
   tmux_dead: "Tmux dead",
+  yolo_unchecked: "Unchecked",
+  last_error_call: "Last call errored",
 };
 
 function humanize(state: string): string {

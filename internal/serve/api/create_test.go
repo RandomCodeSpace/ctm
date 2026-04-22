@@ -202,7 +202,9 @@ func TestCreate_RelativeWorkdir(t *testing.T) {
 	}
 }
 
-func TestCreate_MissingWorkdir(t *testing.T) {
+func TestCreate_UncreatableWorkdir(t *testing.T) {
+	// `/definitely/…` — MkdirAll can't create /definitely from a
+	// non-root test process, so this exercises the mkdir-failed branch.
 	h := api.CreateSession(&fakeCreateProj{}, &fakeCreateSpawner{}, fakeLookPath{ok: true})
 	rec := httptest.NewRecorder()
 	h(rec, createReq(t, map[string]string{"workdir": "/definitely/not/here/xyz"}))
@@ -211,6 +213,22 @@ func TestCreate_MissingWorkdir(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "bad_workdir") {
 		t.Fatalf("body = %q", rec.Body.String())
+	}
+}
+
+func TestCreate_AutoCreatesMissingWorkdir(t *testing.T) {
+	parent := tempDir(t)
+	newDir := filepath.Join(parent, "newly-created")
+	proj := &fakeCreateProj{sess: map[string]session.Session{}}
+	spawn := &fakeCreateSpawner{returnSess: session.Session{UUID: "u", Mode: "yolo"}}
+	h := api.CreateSession(proj, spawn, fakeLookPath{ok: true})
+	rec := httptest.NewRecorder()
+	h(rec, createReq(t, map[string]string{"workdir": newDir}))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d (%s), want 201", rec.Code, rec.Body.String())
+	}
+	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
+		t.Fatalf("workdir not auto-created: err=%v", err)
 	}
 }
 

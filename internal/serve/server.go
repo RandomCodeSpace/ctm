@@ -902,17 +902,26 @@ func (c createSpawner) Spawn(name, workdir string) (session.Session, error) {
 	})
 }
 
-// SendInitialPrompt fires `text` into the new session's pane after a
-// short delay so claude has time to boot and show its prompt. Runs
-// in a goroutine — fire-and-forget; errors are logged, not returned.
+// SendInitialPrompt fires `text` into the new session's pane after
+// claude has had time to boot + render its input prompt. Runs in a
+// goroutine — fire-and-forget; errors are logged, not returned.
+//
+// 8s is empirical: 3s was too fast — the text landed in claude's
+// buffer but the Enter keybind fired before the TUI had attached
+// its input handler, so the prompt appeared on screen but was
+// never submitted. 8s reliably catches the post-splash prompt on
+// cold-start machines.
 func (c createSpawner) SendInitialPrompt(name, text string) {
 	go func() {
-		time.Sleep(3 * time.Second)
+		time.Sleep(8 * time.Second)
 		target := name + ":0.0"
 		if err := c.tmux.SendKeys(target, text); err != nil {
 			slog.Warn("initial prompt send failed", "session", name, "err", err.Error())
 			return
 		}
+		// Small gap between keystrokes and Enter so claude has time
+		// to register the final character before the submit.
+		time.Sleep(300 * time.Millisecond)
 		if err := c.tmux.SendEnter(target); err != nil {
 			slog.Warn("initial prompt enter failed", "session", name, "err", err.Error())
 		}

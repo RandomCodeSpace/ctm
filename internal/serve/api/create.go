@@ -5,6 +5,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,9 +70,24 @@ func CreateSession(src InputSessionSource, sp CreateSpawner, lp CreateLookPath) 
 		}
 		info, err := os.Stat(body.Workdir)
 		if err != nil {
-			writeInputErr(w, http.StatusBadRequest, "bad_workdir",
-				"workdir stat: "+err.Error())
-			return
+			if !errors.Is(err, fs.ErrNotExist) {
+				writeInputErr(w, http.StatusBadRequest, "bad_workdir",
+					"workdir stat: "+err.Error())
+				return
+			}
+			// Auto-create the workdir so users can spawn sessions for
+			// directories that don't exist yet (fresh project scratchpad).
+			if mkErr := os.MkdirAll(body.Workdir, 0o755); mkErr != nil {
+				writeInputErr(w, http.StatusBadRequest, "bad_workdir",
+					"workdir mkdir: "+mkErr.Error())
+				return
+			}
+			info, err = os.Stat(body.Workdir)
+			if err != nil {
+				writeInputErr(w, http.StatusInternalServerError, "bad_workdir",
+					"workdir stat after mkdir: "+err.Error())
+				return
+			}
 		}
 		if !info.IsDir() {
 			writeInputErr(w, http.StatusBadRequest, "workdir_not_dir",
