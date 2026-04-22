@@ -21,6 +21,7 @@ import { LogDiskUsage } from "@/components/LogDiskUsage";
 import { CostChart } from "@/components/CostChart";
 import { SubagentTree } from "@/components/SubagentTree";
 import { AgentTeamsPanel } from "@/components/AgentTeamsPanel";
+import { SessionInputBar } from "@/components/SessionInputBar";
 import { useSession, type Session } from "@/hooks/useSessions";
 import { useCheckpoints, type Checkpoint } from "@/hooks/useCheckpoints";
 import { relativeTime, shortenPath } from "@/lib/format";
@@ -213,6 +214,12 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
           )}
         </TabsContent>
       </Tabs>
+      {session && (
+        <SessionInputBar
+          sessionName={session.name}
+          mode={session.mode}
+        />
+      )}
     </section>
   );
 }
