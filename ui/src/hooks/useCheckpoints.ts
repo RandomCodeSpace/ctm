@@ -9,11 +9,16 @@ export interface Checkpoint {
   short_sha: string;
 }
 
+export interface CheckpointsResponse {
+  git_workdir: boolean;
+  checkpoints: Checkpoint[];
+}
+
 export function useCheckpoints(sessionName: string | undefined, limit = 50) {
-  return useQuery<Checkpoint[]>({
+  return useQuery<CheckpointsResponse>({
     queryKey: ["checkpoints", sessionName, limit],
     queryFn: () =>
-      api<Checkpoint[]>(
+      api<CheckpointsResponse>(
         `/api/sessions/${encodeURIComponent(sessionName!)}/checkpoints?limit=${limit}`,
       ),
     enabled: Boolean(sessionName),

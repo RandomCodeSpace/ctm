@@ -356,6 +356,9 @@ function CheckpointsTab({ sessionName }: { sessionName: string }) {
   // flow are fully independent — closing one must not affect the other.
   const [diffTarget, setDiffTarget] = useState<Checkpoint | null>(null);
 
+  const checkpoints = data?.checkpoints ?? [];
+  const isGitWorkdir = data?.git_workdir ?? true;
+
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -374,13 +377,24 @@ function CheckpointsTab({ sessionName }: { sessionName: string }) {
             {error instanceof Error ? `: ${error.message}` : ""}
           </p>
         )}
-        {!isLoading && !isError && (data ?? []).length === 0 && (
+        {!isLoading && !isError && !isGitWorkdir && (
+          <div className="m-4 border-l-[3px] border-accent-gold bg-surface px-3 py-3 text-sm text-fg">
+            <div className="font-semibold">Checkpoints need a git repo</div>
+            <p className="mt-1 text-[12px] text-fg-dim">
+              This session&apos;s workdir isn&apos;t a git repository, so ctm has nothing to snapshot.
+              Run{" "}
+              <code className="rounded bg-surface-2 px-1 py-0.5 font-mono">git init</code>{" "}
+              in the workdir to enable pre-yolo checkpoints on the next tool call.
+            </p>
+          </div>
+        )}
+        {!isLoading && !isError && isGitWorkdir && checkpoints.length === 0 && (
           <p className="px-4 py-8 text-center text-sm text-fg-dim">
             No checkpoints. Run ctm yolo to create the first.
           </p>
         )}
         <ul role="list">
-          {(data ?? []).map((cp) => (
+          {checkpoints.map((cp) => (
             <li key={cp.sha}>
               <CheckpointRow
                 checkpoint={cp}

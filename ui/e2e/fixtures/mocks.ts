@@ -73,7 +73,7 @@ export async function installMocks(
     } else if (path.endsWith("/teams")) {
       body = JSON.stringify({ teams: [] });
     } else if (path.endsWith("/checkpoints")) {
-      body = "[]";
+      body = JSON.stringify({ git_workdir: true, checkpoints: [] });
     } else if (path.endsWith("/feed/history")) {
       body = JSON.stringify({ events: [], has_more: false });
     } else if (path === "/api/logs/usage") {

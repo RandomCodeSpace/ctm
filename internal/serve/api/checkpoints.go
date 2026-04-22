@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -141,10 +143,20 @@ func Checkpoints(resolveWorkdir func(name string) (string, bool), cache *Checkpo
 			}
 		}
 
+		gitDir := isGitWorkdir(workdir)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+
+		if !gitDir {
+			_ = json.NewEncoder(w).Encode(checkpointsResp{
+				GitWorkdir:  false,
+				Checkpoints: []git.Checkpoint{},
+			})
+			return
+		}
+
 		list, err := cache.Get(workdir, name, limit)
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "git_failed"})
 			return
@@ -153,8 +165,25 @@ func Checkpoints(resolveWorkdir func(name string) (string, bool), cache *Checkpo
 			list = []git.Checkpoint{}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(list)
+		_ = json.NewEncoder(w).Encode(checkpointsResp{
+			GitWorkdir:  true,
+			Checkpoints: list,
+		})
 	}
+}
+
+type checkpointsResp struct {
+	GitWorkdir  bool             `json:"git_workdir"`
+	Checkpoints []git.Checkpoint `json:"checkpoints"`
+}
+
+// isGitWorkdir reports whether workdir contains a `.git` entry (dir
+// or file — worktrees use a file). No stat = no git repo = no
+// checkpoints possible.
+func isGitWorkdir(workdir string) bool {
+	if workdir == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(workdir, ".git"))
+	return err == nil
 }

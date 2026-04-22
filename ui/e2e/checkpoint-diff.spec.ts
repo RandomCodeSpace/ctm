@@ -23,20 +23,27 @@ test.describe("Checkpoint diff viewer", () => {
 
     // Checkpoint list: one commit; the "View diff" button's rendered
     // SHA will be derived from this row's `short_sha`.
-    await page.route("**/api/sessions/alpha/checkpoints**", (route: Route) =>
-      route.fulfill({
+    await page.route("**/api/sessions/alpha/checkpoints**", (route: Route) => {
+      // Diff endpoint also matches this glob (path includes /checkpoints/<sha>/diff).
+      // Fall through to the specific diff route when the path is deeper.
+      const url = new URL(route.request().url());
+      if (!url.pathname.endsWith("/checkpoints")) return route.fallback();
+      return route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify([
-          {
-            sha: FULL_SHA,
-            short_sha: FULL_SHA.slice(0, 7),
-            subject: "checkpoint: pre-yolo 2026-04-21T12:00:00",
-            author: "ctm",
-            ts: new Date(Date.now() - 60_000).toISOString(),
-          },
-        ]),
-      }),
-    );
+        body: JSON.stringify({
+          git_workdir: true,
+          checkpoints: [
+            {
+              sha: FULL_SHA,
+              short_sha: FULL_SHA.slice(0, 7),
+              subject: "checkpoint: pre-yolo 2026-04-21T12:00:00",
+              author: "ctm",
+              ts: new Date(Date.now() - 60_000).toISOString(),
+            },
+          ],
+        }),
+      });
+    });
 
     // Diff endpoint. Note the path order differs from /checkpoints so
     // this route won't collide with the list mock above.
