@@ -78,6 +78,10 @@ export async function installMocks(
       body = JSON.stringify({ checks: [], ok: true });
     } else if (path === "/api/config") {
       body = "{}";
+    } else if (/\/api\/sessions\/[^/]+\/input$/.test(path)) {
+      // V25 session-input default: 204 No Content. Tests override with
+      // page.route(...) when they want an error case.
+      return route.fulfill({ status: 204 });
     }
     return route.fulfill({ contentType: "application/json", body });
   });
