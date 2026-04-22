@@ -110,6 +110,28 @@ export async function installMocks(
     // CostChart on undefined dates. Nested paths like
     // `/api/sessions/alpha/checkpoints` fall through to the
     // shape-aware catch-all above.
+    if (path === "/api/sessions" && route.request().method() === "POST") {
+      // V26 create-session default: 201 with a synthesized session.
+      // Tests override via page.route to exercise 409 / other error cases.
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          name: "auto",
+          uuid: "u-new",
+          mode: "yolo",
+          workdir: "/tmp/auto",
+          created_at: new Date().toISOString(),
+          last_attached_at: null,
+          last_tool_call_at: null,
+          is_active: true,
+          tmux_alive: true,
+          context_pct: null,
+          tokens: { input_tokens: 0, output_tokens: 0, cache_tokens: 0 },
+          attention: null,
+        }),
+      });
+    }
     if (path === "/api/sessions") {
       return route.fulfill({
         contentType: "application/json",
