@@ -218,7 +218,7 @@ function Results({
   if (!hasQuery) {
     return (
       <div className="px-3 py-6 text-center text-xs text-fg-dim">
-        Type at least 2 characters to search.
+        Type at least 3 characters to search.
       </div>
     );
   }

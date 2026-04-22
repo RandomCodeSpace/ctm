@@ -68,7 +68,15 @@ export function QuotaStrip() {
     <div
       role="region"
       aria-label="Rate limit usage"
-      className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border bg-bg px-4 py-2"
+      className={cn(
+        "border-b border-border bg-bg px-4 py-2",
+        // Stack the two bars vertically on narrow viewports — at
+        // 390px the 5H + Weekly row clips the trailing percentage off
+        // the right edge because each bar demands min-w-[6rem] and
+        // flex-wrap only wraps whole items, not mid-item. Above sm,
+        // return to the horizontal layout.
+        "flex flex-col gap-y-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-2",
+      )}
     >
       <QuotaBar pct={pct5} resetAt={reset5} label="5h" />
       <QuotaBar pct={pctW} resetAt={resetW} label="Weekly" />
