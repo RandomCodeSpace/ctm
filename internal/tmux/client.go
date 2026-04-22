@@ -15,6 +15,17 @@ func IsInsideTmux() bool {
 // Client wraps tmux CLI commands.
 type Client struct {
 	confPath string
+	// execCommand lets tests inject a fake exec. Defaults to
+	// exec.Command when nil, so callers outside tests don't need to
+	// set it.
+	execCommand func(name string, args ...string) *exec.Cmd
+}
+
+func (c *Client) cmd(name string, args ...string) *exec.Cmd {
+	if c.execCommand != nil {
+		return c.execCommand(name, args...)
+	}
+	return exec.Command(name, args...)
 }
 
 // NewClient creates a new Client using the given tmux config path.
@@ -180,6 +191,27 @@ func (c *Client) ChooseSession() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// SendKeys pipes keys to the given tmux target. The `-l` flag asks
+// tmux to treat the text as a literal string (no keybinding
+// translation), so `y\n` sends 'y' then newline, not the VI-mode key
+// "Enter". Callers are responsible for appending a trailing `\n`
+// when they want the remote shell / REPL to receive it as submission.
+//
+// target format: "<session>:<window>.<pane>" — e.g. "alpha:0.0".
+// Empty target is rejected to guard against a caller bug that would
+// otherwise default to tmux's "current client" and type into the
+// wrong place.
+func (c *Client) SendKeys(target, keys string) error {
+	if target == "" {
+		return fmt.Errorf("tmux send-keys: empty target")
+	}
+	out, err := c.cmd("tmux", "send-keys", "-t", target, "-l", keys).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("tmux send-keys -t %q: %w: %s", target, err, string(out))
+	}
+	return nil
 }
 
 // --- unexported helpers ---

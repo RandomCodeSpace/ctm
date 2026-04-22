@@ -1,7 +1,9 @@
 package tmux
 
 import (
+	"os/exec"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +72,29 @@ func TestBuildRespawnPaneArgsShellCmdIsSingleArg(t *testing.T) {
 	// args[6] should be the entire shellCmd as one string
 	if args[6] != shellCmd {
 		t.Errorf("shellCmd should be a single arg, got args: %v", args)
+	}
+}
+
+func TestSendKeys(t *testing.T) {
+	var got []string
+	c := &Client{}
+	c.execCommand = func(name string, args ...string) *exec.Cmd {
+		got = append([]string{name}, args...)
+		return exec.Command("true")
+	}
+	if err := c.SendKeys("alpha:0.0", "y\n"); err != nil {
+		t.Fatalf("SendKeys: %v", err)
+	}
+	want := []string{"tmux", "send-keys", "-t", "alpha:0.0", "-l", "y\n"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("tmux argv = %q, want %q", got, want)
+	}
+}
+
+func TestSendKeys_EmptyTarget(t *testing.T) {
+	c := &Client{}
+	err := c.SendKeys("", "y\n")
+	if err == nil {
+		t.Fatalf("SendKeys(\"\", \"y\\n\") returned nil, want non-nil error")
 	}
 }
