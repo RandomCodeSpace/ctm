@@ -17,6 +17,7 @@ import (
 type TmuxSpawner interface {
 	NewSession(name, workdir, shellCmd string) error
 	SendKeys(target, keys string) error
+	KillSession(name string) error
 }
 
 // Saver is the narrow slice of *Store Yolo needs.
@@ -71,6 +72,9 @@ func Yolo(opts SpawnOpts) (Session, error) {
 		Workdir: opts.Workdir,
 	}
 	if err := opts.Store.Save(&sess); err != nil {
+		// Best-effort cleanup of the orphan tmux session we just created.
+		// Ignore the kill error — Save's err is the meaningful one.
+		_ = opts.Tmux.KillSession(opts.Name)
 		return Session{}, fmt.Errorf("session save: %w", err)
 	}
 	return sess, nil

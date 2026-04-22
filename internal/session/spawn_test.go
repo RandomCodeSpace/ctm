@@ -10,9 +10,11 @@ import (
 )
 
 type fakeTmux struct {
-	newCalled int
-	newArgs   struct{ name, workdir, shellCmd string }
-	failNew   error
+	newCalled  int
+	newArgs    struct{ name, workdir, shellCmd string }
+	failNew    error
+	killCalled int
+	killArgs   struct{ name string }
 }
 
 func (f *fakeTmux) NewSession(name, workdir, shellCmd string) error {
@@ -24,6 +26,12 @@ func (f *fakeTmux) NewSession(name, workdir, shellCmd string) error {
 }
 
 func (f *fakeTmux) SendKeys(target, keys string) error {
+	return nil
+}
+
+func (f *fakeTmux) KillSession(name string) error {
+	f.killCalled++
+	f.killArgs.name = name
 	return nil
 }
 
@@ -119,5 +127,29 @@ func TestYolo_RejectsFileAsWorkdir(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected rejection of file-as-workdir")
+	}
+}
+
+type fakeStoreErr struct{}
+
+func (f fakeStoreErr) Save(*session.Session) error { return errors.New("save exploded") }
+
+func TestYolo_SaveFails_KillsTmux(t *testing.T) {
+	dir := t.TempDir()
+	tmux := &fakeTmux{}
+	_, err := session.Yolo(session.SpawnOpts{
+		Name:    "smoke",
+		Workdir: dir,
+		Tmux:    tmux,
+		Store:   fakeStoreErr{},
+	})
+	if err == nil {
+		t.Fatal("expected save error")
+	}
+	if tmux.killCalled != 1 {
+		t.Fatalf("KillSession called %d times, want 1 (orphan cleanup)", tmux.killCalled)
+	}
+	if tmux.killArgs.name != "smoke" {
+		t.Fatalf("killed %q, want %q", tmux.killArgs.name, "smoke")
 	}
 }
