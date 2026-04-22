@@ -7,7 +7,6 @@ import { SseProvider } from "@/components/SseProvider";
 import { Dashboard } from "@/routes/Dashboard";
 import { DoctorPanel } from "@/routes/DoctorPanel";
 import { FeedFullscreen } from "@/routes/FeedFullscreen";
-import { TokenPasteScreen } from "@/routes/TokenPasteScreen";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { AuthGate } from "@/routes/AuthGate";
 
@@ -34,7 +33,6 @@ const router = createBrowserRouter([
   { path: "/s/:name/meta", element: <Dashboard /> },
   { path: "/feed", element: <FeedFullscreen /> },
   { path: "/doctor", element: <DoctorPanel /> },
-  { path: "/auth", element: <TokenPasteScreen /> },
 ]);
 
 export function App() {

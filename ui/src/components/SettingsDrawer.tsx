@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, LogOut } from "lucide-react";
+import { useLogout } from "@/hooks/useLogout";
 import {
   Sheet,
   SheetContent,
@@ -99,6 +100,7 @@ const THRESHOLD_META: Array<{
 export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const { data, isLoading } = useConfigGet(open);
   const mutation = useConfigUpdate();
+  const logout = useLogout();
 
   const [form, setForm] = useState<FormState | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
@@ -231,6 +233,18 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
             </>
           )}
         </div>
+
+        <section className="mt-2 border-t border-border px-4 pt-4 pb-2">
+          <button
+            type="button"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+            className="inline-flex items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-xs text-fg hover:bg-surface-2 disabled:opacity-40"
+          >
+            <LogOut size={14} aria-hidden />
+            Log out
+          </button>
+        </section>
 
         <SheetFooter className="border-t border-border">
           <Button

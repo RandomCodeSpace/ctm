@@ -97,8 +97,8 @@ describe("SseProvider", () => {
     unmount();
   });
 
-  it("does not subscribe when no token is present (TokenPasteScreen path)", async () => {
-    // No token in storage → AuthProvider renders <TokenPasteScreen>, the
+  it("does not subscribe when no token is present (AuthGate path)", async () => {
+    // No token in storage → AuthGate renders <LoginForm>, the
     // SseProvider tree is never mounted under it.
     render(<Tree />);
     await new Promise((r) => setTimeout(r, 30));

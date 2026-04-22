@@ -15,7 +15,6 @@ import {
   getToken,
   setToken,
 } from "@/lib/api";
-import { TokenPasteScreen } from "@/components/TokenPasteScreen";
 
 interface AuthCtx {
   token: string | null;
@@ -26,10 +25,9 @@ interface AuthCtx {
 const Ctx = createContext<AuthCtx | null>(null);
 
 /**
- * Holds the bearer token. If absent on first paint, renders <TokenPasteScreen>
- * and short-circuits the rest of the app. Mid-session 401s (from REST or SSE)
- * clear the token and navigate to /auth?next=<current> so the user returns
- * to where they were after re-pasting.
+ * Holds the bearer token. If absent on first paint, short-circuits the rest of
+ * the app — AuthGate renders <LoginForm>. Mid-session 401s (from REST or SSE)
+ * clear the token so AuthGate re-renders into the login screen.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -78,14 +76,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({ token, setTokenAndPersist, signOut }),
     [token, setTokenAndPersist, signOut],
   );
-
-  if (!token) {
-    return (
-      <Ctx.Provider value={value}>
-        <TokenPasteScreen />
-      </Ctx.Provider>
-    );
-  }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
