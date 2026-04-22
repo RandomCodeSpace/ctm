@@ -36,13 +36,10 @@ export function SessionListPanel({
     <aside
       aria-label="Sessions"
       className={cn(
-        // On desktop the aside is a fixed-height flex column so the
-        // middle region gets its own scroll; on mobile the page body
-        // is the scroll container, so the aside flows naturally and
-        // the footer sits at the end of the document (reachable in
-        // one continuous scroll, letting the browser URL bar collapse
-        // as the user drags).
-        "flex flex-col border-r border-border bg-bg md:h-full md:min-h-0",
+        // Fixed-height flex column: header + scrollable list + footer.
+        // The inner div is the scroll container so the Live-feed link
+        // stays pinned at the viewport bottom at every width.
+        "flex h-full min-h-0 flex-col border-r border-border bg-bg",
         className,
       )}
     >
@@ -61,7 +58,15 @@ export function SessionListPanel({
         </label>
       </header>
 
-      <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto",
+          // overscroll-contain stops the inner scroll from chaining
+          // into the body when the user flings past either end —
+          // gives a tighter, more app-like feel on touch devices.
+          "overscroll-contain",
+        )}
+      >
         {isLoading && (
           <div className="space-y-2 p-4">
             <Skeleton className="h-16 w-full" />
