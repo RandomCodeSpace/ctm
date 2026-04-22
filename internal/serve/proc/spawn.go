@@ -17,11 +17,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
-
-	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 )
 
 const (
@@ -64,22 +61,15 @@ func EnsureServeRunning(ctx context.Context) {
 // PostEvent fires a hook event to the local serve daemon. event must
 // match one of the names whitelisted in `internal/serve/api.Hooks`
 // (session_new / session_attached / session_killed / on_yolo). The
-// form is sent as `application/x-www-form-urlencoded` and bearer-
-// authed with the same token serve loads from auth.TokenPath().
+// form is sent as `application/x-www-form-urlencoded`. No bearer token
+// is needed — /api/hooks/* is unauthed (daemon binds 127.0.0.1 only).
 func PostEvent(event string, form url.Values) {
-	token, err := loadToken()
-	if err != nil || token == "" {
-		slog.Debug("PostEvent skipped: no serve token", "event", event, "err", err)
-		return
-	}
-
 	body := strings.NewReader(form.Encode())
 	req, err := http.NewRequest(http.MethodPost,
 		"http://"+serveAddr+"/api/hooks/"+event, body)
 	if err != nil {
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{Timeout: postTimeout}
@@ -105,8 +95,7 @@ const serveVersionHeader = "X-Ctm-Serve"
 // probeServe verifies that the listener on serveAddr is a real ctm
 // serve daemon, NOT just any process returning 200 on /healthz. The
 // X-Ctm-Serve header check defends against a local-uid impostor
-// binding 127.0.0.1:37778 first to capture the bearer token that
-// PostEvent attaches to every hook POST.
+// binding 127.0.0.1:37778 before the real daemon starts.
 func probeServe() bool {
 	client := &http.Client{Timeout: probeTimeout}
 	resp, err := client.Get("http://" + serveAddr + "/healthz")
@@ -146,15 +135,3 @@ func spawnDetached() error {
 	return cmd.Start()
 }
 
-var (
-	tokenOnce sync.Once
-	tokenVal  string
-	tokenErr  error
-)
-
-func loadToken() (string, error) {
-	tokenOnce.Do(func() {
-		tokenVal, tokenErr = auth.LoadToken(auth.TokenPath())
-	})
-	return tokenVal, tokenErr
-}

@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/RandomCodeSpace/ctm/internal/config"
-	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
@@ -78,7 +77,6 @@ func Run(ctx context.Context, cfg config.Config) []Check {
 		checkTmuxVersion,
 		checkRequiredEnv,
 		checkRequiredInPath,
-		checkServeToken,
 		checkConfig,
 		checkSessions,
 	} {
@@ -171,28 +169,6 @@ func checkRequiredInPath(_ context.Context, cfg config.Config) []Check {
 		out = append(out, c)
 	}
 	return out
-}
-
-func checkServeToken(_ context.Context, _ config.Config) []Check {
-	c := Check{Name: "serve:token"}
-	tokenPath := auth.TokenPath()
-	info, err := os.Stat(tokenPath)
-	if err != nil {
-		c.Status = StatusErr
-		c.Message = fmt.Sprintf("missing at %s", tokenPath)
-		c.Remediation = "run `ctm doctor` once (on CLI) to seed serve.token, or `ctm install`"
-		return []Check{c}
-	}
-	mode := info.Mode().Perm()
-	if mode != 0o600 {
-		c.Status = StatusWarn
-		c.Message = fmt.Sprintf("present but mode is %o (want 0600)", mode)
-		c.Remediation = fmt.Sprintf("run: chmod 600 %s", tokenPath)
-		return []Check{c}
-	}
-	c.Status = StatusOK
-	c.Message = fmt.Sprintf("present (mode 0600, %d bytes)", info.Size())
-	return []Check{c}
 }
 
 func checkConfig(_ context.Context, cfg config.Config) []Check {

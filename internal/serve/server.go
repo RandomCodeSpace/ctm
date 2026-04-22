@@ -544,9 +544,12 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/feed", authHF(api.Feed(s.hub, "")))
 	mux.Handle("GET /api/sessions/{name}/feed", authHF(api.Feed(s.hub, "")))
 
-	// Hook intake from `proc.PostEvent` (Step 7); spawns / stops
-	// tailers as a side-effect of session_new / session_killed.
-	mux.Handle("POST /api/hooks/{event}", authHF(api.Hooks(s.tailers, s.hub)))
+	// Hook intake from `proc.PostEvent`; spawns / stops tailers as a
+	// side-effect of session_new / session_killed. No auth wrapper —
+	// the daemon binds 127.0.0.1 only, so callers are implicitly
+	// local-uid peers; the X-Ctm-Serve probe in proc.probeServe is the
+	// anti-impostor signal and is sufficient for this fire-and-forget path.
+	mux.Handle("POST /api/hooks/{event}", api.Hooks(s.tailers, s.hub))
 
 	// V21 log disk usage. Walks the JSONL log dir and reports bytes per
 	// session + total so users can notice when it's time to prune.
