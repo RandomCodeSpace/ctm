@@ -16,7 +16,11 @@ export function useLogout() {
     },
     onSettled: () => {
       signOut();
-      qc.clear();
+      // Force AuthGate to see authenticated=false immediately.
+      // Don't use qc.clear() — it detaches mounted observers and the
+      // subsequent re-fetch doesn't reconnect, so the UI stays stuck
+      // on the authenticated tree.
+      qc.setQueryData(["auth-status"], { registered: true, authenticated: false });
     },
   });
 }

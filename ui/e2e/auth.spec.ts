@@ -78,14 +78,17 @@ test.describe("Auth (V27)", () => {
     ).toBeVisible();
   });
 
-  test("logout from settings returns to login", async ({ page }) => {
+  test("logout from settings returns to login without reload", async ({ page }) => {
     await installMocks(page, { authRegistered: true, authAuthenticated: true });
     await page.goto("/");
     await page.getByRole("button", { name: /open settings/i }).click();
-    await page.getByRole("button", { name: /log out/i }).click();
 
+    // Swap mocks BEFORE clicking logout so any subsequent auth-status
+    // refetch returns authenticated:false. The UI must transition
+    // without a page.reload() — that's the core UX contract.
     await installMocks(page, { authRegistered: true, authAuthenticated: false });
-    await page.reload();
+
+    await page.getByRole("button", { name: /log out/i }).click();
     await expect(
       page.getByRole("heading", { name: /log in to ctm/i }),
     ).toBeVisible();
