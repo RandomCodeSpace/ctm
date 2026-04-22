@@ -42,7 +42,7 @@ function QuotaBar({ pct, resetAt, label }: BarProps) {
       </span>
       {resetAt && (
         <span
-          className="hidden shrink-0 text-xs text-fg-dim md:inline"
+          className="shrink-0 text-xs text-fg-dim"
           title={`Resets at ${resetAt}`}
         >
           resets in {relativeFuture(resetAt)}
