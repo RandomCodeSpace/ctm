@@ -29,14 +29,23 @@ func (f *fakeInputProj) TmuxAlive(name string) bool {
 }
 
 type fakeInputTmux struct {
-	lastTarget string
-	lastKeys   string
-	err        error
+	lastTarget  string
+	lastKeys    string
+	sendCalls   int
+	enterCalls  int
+	err         error
 }
 
 func (f *fakeInputTmux) SendKeys(target, keys string) error {
 	f.lastTarget = target
 	f.lastKeys = keys
+	f.sendCalls++
+	return f.err
+}
+
+func (f *fakeInputTmux) SendEnter(target string) error {
+	f.lastTarget = target
+	f.enterCalls++
 	return f.err
 }
 
@@ -83,8 +92,11 @@ func TestInput_Preset_Yes(t *testing.T) {
 	if tmux.lastTarget != "alpha:0.0" {
 		t.Fatalf("tmux target = %q, want %q", tmux.lastTarget, "alpha:0.0")
 	}
-	if tmux.lastKeys != "y\n" {
-		t.Fatalf("tmux keys = %q, want %q", tmux.lastKeys, "y\n")
+	if tmux.lastKeys != "y" {
+		t.Fatalf("tmux literal = %q, want %q", tmux.lastKeys, "y")
+	}
+	if tmux.enterCalls != 1 {
+		t.Fatalf("SendEnter called %d times, want 1", tmux.enterCalls)
 	}
 }
 
@@ -96,8 +108,8 @@ func TestInput_Preset_No(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	if tmux.lastKeys != "n\n" {
-		t.Fatalf("tmux keys = %q, want %q", tmux.lastKeys, "n\n")
+	if tmux.lastKeys != "n" || tmux.enterCalls != 1 {
+		t.Fatalf("tmux literal=%q enters=%d, want %q + 1", tmux.lastKeys, tmux.enterCalls, "n")
 	}
 }
 
@@ -109,8 +121,11 @@ func TestInput_Preset_Continue(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	if tmux.lastKeys != "\n" {
-		t.Fatalf("tmux keys = %q, want %q", tmux.lastKeys, "\n")
+	if tmux.sendCalls != 0 {
+		t.Fatalf("SendKeys called %d times for 'continue', want 0 (Enter-only)", tmux.sendCalls)
+	}
+	if tmux.enterCalls != 1 {
+		t.Fatalf("SendEnter called %d times, want 1", tmux.enterCalls)
 	}
 }
 
@@ -122,8 +137,8 @@ func TestInput_FreeText(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	if tmux.lastKeys != "approve\n" {
-		t.Fatalf("tmux keys = %q, want %q", tmux.lastKeys, "approve\n")
+	if tmux.lastKeys != "approve" || tmux.enterCalls != 1 {
+		t.Fatalf("tmux literal=%q enters=%d, want %q + 1", tmux.lastKeys, tmux.enterCalls, "approve")
 	}
 }
 

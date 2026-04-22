@@ -26,6 +26,7 @@ type InputSessionSource interface {
 // InputTmux is the narrow slice of *tmux.Client the Input handler needs.
 type InputTmux interface {
 	SendKeys(target, keys string) error
+	SendEnter(target string) error
 }
 
 type inputReq struct {
@@ -95,7 +96,18 @@ func Input(src InputSessionSource, tmux InputTmux) http.HandlerFunc {
 		}
 
 		target := fmt.Sprintf("%s:0.0", sess.Name)
-		if err := tmux.SendKeys(target, keys); err != nil {
+		// `keys` always ends with "\n" by construction (see expandInput).
+		// We split: literal text via -l, then a real tmux Enter key so
+		// claude's TUI treats it as submit rather than "add newline".
+		literal := strings.TrimRight(keys, "\n")
+		if literal != "" {
+			if err := tmux.SendKeys(target, literal); err != nil {
+				slog.Error("input send_failed", "session", name, "err", err.Error())
+				writeInputErr(w, http.StatusInternalServerError, "send_failed", err.Error())
+				return
+			}
+		}
+		if err := tmux.SendEnter(target); err != nil {
 			slog.Error("input send_failed", "session", name, "err", err.Error())
 			writeInputErr(w, http.StatusInternalServerError, "send_failed", err.Error())
 			return

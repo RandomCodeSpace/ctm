@@ -214,6 +214,21 @@ func (c *Client) SendKeys(target, keys string) error {
 	return nil
 }
 
+// SendEnter sends the tmux "Enter" key (without -l) to the given
+// target. A literal `\n` via SendKeys is the LF character, which
+// TUIs like claude interpret as "insert newline", not "submit".
+// Sending the Enter keybind triggers the real submit path.
+func (c *Client) SendEnter(target string) error {
+	if target == "" {
+		return fmt.Errorf("tmux send-keys Enter: empty target")
+	}
+	out, err := c.cmd("tmux", "send-keys", "-t", target, "Enter").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("tmux send-keys Enter -t %q: %w: %s", target, err, string(out))
+	}
+	return nil
+}
+
 // --- unexported helpers ---
 
 // buildNewSessionArgs constructs args for `tmux new-session`.
