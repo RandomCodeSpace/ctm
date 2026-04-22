@@ -66,8 +66,6 @@ export async function installMocks(
         points: [],
         totals: { input: 0, output: 0, cache: 0, cost_usd_micros: 0 },
       });
-    } else if (path.startsWith("/api/search")) {
-      body = JSON.stringify({ query: "", matches: [], truncated: false });
     } else if (path.endsWith("/subagents")) {
       body = JSON.stringify({ subagents: [] });
     } else if (path.endsWith("/teams")) {

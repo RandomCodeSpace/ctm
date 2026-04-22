@@ -558,14 +558,6 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// V19 slice 3 (v0.3): FTS5-backed full-text search over indexed
 	// tool_call content. Rebuilt on each boot from the tailer's
-	// offset-0 replay; live rows appended via the tool_call hub
-	// subscriber. Min query length bumps to 3 chars (trigram
-	// tokenizer).
-	mux.Handle("GET /api/search", authHF(api.Search(
-		searchSourceAdapter{s.cost},
-		sessionNameResolver{proj: s.proj},
-	)))
-
 	// V13 cumulative cost chart. Pulls from the SQLite cost store; adapter
 	// below copies store.CostPoint → api.CostPoint to keep the api package
 	// free of the store dependency.
@@ -828,44 +820,6 @@ func (a quotaSourceAdapter) Snapshot() api.QuotaSnapshot {
 // back via ~/.claude/projects/*/<uuid>.jsonl so transcripts from
 // previous claude sessions in the same workdir still surface with
 // their tmux session name.
-// searchSourceAdapter implements api.SearchSource on top of
-// store.SearchStore (sqliteCostStore satisfies both CostStore and
-// SearchStore via the shared DB handle).
-type searchSourceAdapter struct{ s store.CostStore }
-
-func (a searchSourceAdapter) SearchFTS(q, sessionFilter string, limit int) ([]api.SearchHit, bool, error) {
-	ss, ok := a.s.(store.SearchStore)
-	if !ok {
-		return nil, false, nil
-	}
-	hits, truncated, err := ss.SearchFTS(q, sessionFilter, limit)
-	if err != nil {
-		return nil, false, err
-	}
-	out := make([]api.SearchHit, len(hits))
-	for i, h := range hits {
-		out[i] = api.SearchHit(h)
-	}
-	return out, truncated, nil
-}
-
-// sessionNameResolver reverse-maps session name → log UUID for the
-// V19 slice-3 search handler. logsUUIDResolver already does the
-// forward direction; this type walks the projection's session list
-// for the reverse (O(n), n ≤ ~100 in practice).
-type sessionNameResolver struct{ proj *ingest.Projection }
-
-func (r sessionNameResolver) ResolveSessionName(name string) (string, bool) {
-	if r.proj == nil || name == "" {
-		return "", false
-	}
-	sess, ok := r.proj.Get(name)
-	if !ok {
-		return "", false
-	}
-	return sess.UUID, sess.UUID != ""
-}
-
 // costSourceAdapter implements api.CostSource on top of store.CostStore.
 // The structs have identical field shapes so the conversion is direct.
 type costSourceAdapter struct{ s store.CostStore }
