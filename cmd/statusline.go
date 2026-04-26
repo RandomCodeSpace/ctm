@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,7 +26,7 @@ func init() {
 //
 // Output layout (3 lines):
 //
-//	Line 1: <model> · <project>           (project is OSC 8 hyperlink if git repo)
+//	Line 1: <model> · <project>           (project shown as a plain path)
 //	Line 2: c 25% (437k)  w 40%  h 10%    (context % + tokens + rate limits)
 //	Line 3: ↑ 117k  ↓ 434k                (cumulative session input / output)
 //
@@ -198,12 +197,7 @@ func buildHeader(in *statuslineInput) string {
 	case 1:
 		return cHdrModel + parts[0] + cReset
 	default:
-		url := gitRemoteURL(project)
-		projSeg := cCyan + parts[1] + cReset
-		if url != "" {
-			projSeg = fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, projSeg)
-		}
-		return cHdrModel + parts[0] + cReset + "  " + projSeg
+		return cHdrModel + parts[0] + cReset + "  " + cCyan + parts[1] + cReset
 	}
 }
 
@@ -357,70 +351,6 @@ func shortenPath(p string) string {
 		return "~" + p[len(home):]
 	}
 	return p
-}
-
-// gitRemoteURL walks up from dir looking for a .git/config and, if found,
-// returns the origin remote rewritten to https form. Empty string means
-// "no remote to link to"; the caller then renders the project without a
-// hyperlink.
-func gitRemoteURL(dir string) string {
-	if dir == "" {
-		return ""
-	}
-	for i := 0; i < 40; i++ {
-		cfg := filepath.Join(dir, ".git", "config")
-		if data, err := os.ReadFile(cfg); err == nil {
-			return parseOriginURL(string(data))
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	return ""
-}
-
-func parseOriginURL(content string) string {
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	inOrigin := false
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "[") {
-			inOrigin = line == `[remote "origin"]`
-			continue
-		}
-		if !inOrigin {
-			continue
-		}
-		if !strings.HasPrefix(line, "url") {
-			continue
-		}
-		eq := strings.Index(line, "=")
-		if eq < 0 {
-			continue
-		}
-		return normalizeRemoteURL(strings.TrimSpace(line[eq+1:]))
-	}
-	return ""
-}
-
-// normalizeRemoteURL rewrites git@host:path and https forms into a plain
-// https URL (with any trailing .git stripped). Returns "" for unknown schemes.
-func normalizeRemoteURL(raw string) string {
-	raw = strings.TrimSuffix(raw, ".git")
-	if strings.HasPrefix(raw, "https://") || strings.HasPrefix(raw, "http://") {
-		return raw
-	}
-	if strings.HasPrefix(raw, "git@") {
-		rest := strings.TrimPrefix(raw, "git@")
-		colon := strings.Index(rest, ":")
-		if colon < 0 {
-			return ""
-		}
-		return "https://" + rest[:colon] + "/" + rest[colon+1:]
-	}
-	return ""
 }
 
 // fmtTokens formats n with an SI-style suffix so the statusline width

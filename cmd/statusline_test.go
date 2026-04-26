@@ -96,35 +96,6 @@ func TestFormatModel(t *testing.T) {
 	}
 }
 
-func TestNormalizeRemoteURL(t *testing.T) {
-	cases := map[string]string{
-		"git@github.com:foo/bar.git":    "https://github.com/foo/bar",
-		"https://github.com/foo/bar":    "https://github.com/foo/bar",
-		"https://gitlab.com/x/y.git":    "https://gitlab.com/x/y",
-		"ftp://nope":                    "",
-	}
-	for in, want := range cases {
-		if got := normalizeRemoteURL(in); got != want {
-			t.Errorf("normalizeRemoteURL(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestParseOriginURL(t *testing.T) {
-	cfg := `[core]
-	repositoryformatversion = 0
-[remote "upstream"]
-	url = git@github.com:elsewhere/repo.git
-[remote "origin"]
-	url = git@github.com:me/repo.git
-	fetch = +refs/heads/*:refs/remotes/origin/*
-`
-	got := parseOriginURL(cfg)
-	if got != "https://github.com/me/repo" {
-		t.Errorf("parseOriginURL = %q", got)
-	}
-}
-
 func TestContextTokens_SumsCurrentUsage(t *testing.T) {
 	in := &statuslineInput{}
 	in.ContextWindow.CurrentUsage.InputTokens = intPtr(1000)
