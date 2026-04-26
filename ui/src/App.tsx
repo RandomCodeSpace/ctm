@@ -26,6 +26,7 @@ import { AuthGate } from "@/routes/AuthGate";
 const router = createBrowserRouter([
   { path: "/", element: <Dashboard /> },
   { path: "/s/:name", element: <Dashboard /> },
+  { path: "/s/:name/feed", element: <Dashboard /> },
   { path: "/s/:name/checkpoints", element: <Dashboard /> },
   { path: "/s/:name/pane", element: <Dashboard /> },
   { path: "/s/:name/subagents", element: <Dashboard /> },
