@@ -40,6 +40,30 @@ jobs:
           # and the release build succeed against the source tree.
           go-version-file: go.mod
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Pinned to ui/package.json packageManager so a bumped lockfile
+          # doesn't desync from the toolchain CI runs the build with.
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Build UI bundle
+        # Populates internal/serve/dist/ from ui/dist/ via rsync so the
+        # `//go:embed all:dist` directive in internal/serve/assets.go has
+        # a non-empty match. Without this, both `go test ./...` and the
+        # cross-compiled binary builds below fail at compile time. The
+        # populated dist is naturally bundled into the air-gapped source
+        # tarball later (the tar excludes top-level ./dist staging only,
+        # not internal/serve/dist).
+        run: make ui
+
       - name: Run tests
         run: go test ./...
 
