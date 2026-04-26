@@ -34,6 +34,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -92,6 +94,18 @@ type sqliteCostStore struct {
 // keeps the handler-side Writer from erroring under light contention
 // with the quota-subscriber goroutine.
 func OpenCostStore(path string) (CostStore, error) {
+	// Ensure the parent directory exists. Production opens the DB at
+	// ~/.config/ctm/ctm.db; on a fresh install (or in CI runners
+	// without a pre-existing config dir) the parent might not exist
+	// yet, and mattn/go-sqlite3 surfaces that as
+	// "unable to open database file". Cheap and idempotent — no-op
+	// for ":memory:" (filepath.Dir returns "."). Errors here are
+	// non-fatal: if mkdir fails we let sql.Open surface the real
+	// problem.
+	if path != ":memory:" {
+		_ = os.MkdirAll(filepath.Dir(path), 0o700)
+	}
+
 	// DSN tuning: ?_busy_timeout=5000 waits out brief writer locks;
 	// ?_journal=WAL enables concurrent readers; ?_sync=NORMAL pairs
 	// with WAL for an acceptable durability-vs-speed trade.

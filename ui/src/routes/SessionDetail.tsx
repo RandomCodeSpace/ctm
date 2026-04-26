@@ -41,6 +41,7 @@ type TabKey =
   | "meta";
 
 function tabFromPath(pathname: string): TabKey {
+  if (pathname.endsWith("/feed")) return "feed";
   if (pathname.endsWith("/checkpoints")) return "checkpoints";
   if (pathname.endsWith("/pane")) return "pane";
   if (pathname.endsWith("/subagents")) return "subagents";
