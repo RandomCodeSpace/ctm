@@ -1,0 +1,70 @@
+# PR + non-main-push gate. Runs the same UI build + Go build + tests
+# the release pipeline depends on, so a broken main is caught before
+# merge instead of after.
+#
+# Scope intentionally narrower than `make regression`: e2e (Playwright
+# browser install + browser run), `pnpm audit`, and `govulncheck` are
+# heavier and currently run via `make regression` locally — adding them
+# here is a follow-up if/when they prove necessary as merge gates.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      # main is covered by release.yml; skipping here avoids running the
+      # same checks twice on every merge.
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Build UI bundle
+        # Required before any Go invocation: //go:embed all:dist in
+        # internal/serve/assets.go errors out if internal/serve/dist/
+        # is empty.
+        run: make ui
+
+      - name: Go vet
+        run: go vet -tags sqlite_fts5 ./...
+
+      - name: Go build
+        run: go build -tags sqlite_fts5 ./...
+
+      - name: Go test
+        run: go test -tags sqlite_fts5 ./...
+
+      - name: UI typecheck
+        run: pnpm -C ui exec tsc --noEmit
+
+      - name: UI test
+        run: pnpm -C ui test
