@@ -65,7 +65,12 @@ jobs:
         run: make ui
 
       - name: Run tests
-        run: go test ./...
+        # sqlite_fts5: mattn/go-sqlite3 only compiles FTS5 in when this
+        # tag is set. internal/serve/store's schema uses
+        # `CREATE VIRTUAL TABLE … USING fts5(…)` — without the tag,
+        # OpenCostStore() fails at runtime with "no such module: fts5"
+        # and ~25 store/serve tests blow up.
+        run: go test -tags sqlite_fts5 ./...
 
       - name: Determine bump level
         id: level
@@ -201,8 +206,10 @@ jobs:
             mkdir -p "dist/${stage}"
 
             echo "→ building ${target}"
+            # -tags sqlite_fts5: see "Run tests" step. Released binaries
+            # without this tag panic at boot in OpenCostStore.
             CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-              go build -trimpath -ldflags "$LDFLAGS" \
+              go build -trimpath -tags sqlite_fts5 -ldflags "$LDFLAGS" \
               -o "dist/${stage}/ctm" \
               ./
 
