@@ -16,17 +16,21 @@ import (
 
 // fakeCapturer returns scripted outputs on successive calls. Once the
 // scripted slice is exhausted, the last entry is repeated so the loop
-// has a stable "idle" value to debounce against.
+// has a stable "idle" value to debounce against. lastScrollback
+// records the most recent CapturePaneHistory argument so tests can
+// assert the handler threaded `?history=` through correctly.
 type fakeCapturer struct {
-	mu      sync.Mutex
-	outputs []string
-	errs    []error
-	calls   int32
+	mu             sync.Mutex
+	outputs        []string
+	errs           []error
+	calls          int32
+	lastScrollback int
 }
 
-func (f *fakeCapturer) CapturePane(_ string) (string, error) {
+func (f *fakeCapturer) CapturePaneHistory(_ string, scrollback int) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.lastScrollback = scrollback
 	i := int(atomic.AddInt32(&f.calls, 1)) - 1
 	var out string
 	var err error
@@ -204,6 +208,53 @@ func TestPaneStream_ErrorTwiceEndsStream(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "event: pane_end") {
 		t.Errorf("expected pane_end frame after consecutive errors, got:\n%s", string(body))
+	}
+}
+
+func TestPaneStream_DefaultScrollbackAndOverride(t *testing.T) {
+	cases := []struct {
+		name    string
+		query   string
+		want    int
+	}{
+		{name: "default when unset", query: "", want: defaultPaneScrollback},
+		{name: "honours ?history=250", query: "history=250", want: 250},
+		{name: "caps at maxPaneScrollback", query: "history=99999", want: maxPaneScrollback},
+		{name: "zero disables scrollback", query: "history=0", want: 0},
+		{name: "negative falls back to default", query: "history=-5", want: defaultPaneScrollback},
+		{name: "garbage falls back to default", query: "history=notanumber", want: defaultPaneScrollback},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeCapturer{outputs: []string{"x\n"}}
+			h := PaneStream(fake)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r.SetPathValue("name", "alpha")
+				h(w, r)
+			}))
+			defer srv.Close()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+			defer cancel()
+			url := srv.URL
+			if tc.query != "" {
+				url += "?" + tc.query
+			}
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("GET: %v", err)
+			}
+			defer resp.Body.Close()
+			_ = readPaneFrames(t, resp.Body, 1, 900*time.Millisecond)
+
+			fake.mu.Lock()
+			got := fake.lastScrollback
+			fake.mu.Unlock()
+			if got != tc.want {
+				t.Errorf("lastScrollback = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }
 

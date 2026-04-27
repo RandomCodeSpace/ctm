@@ -40,7 +40,7 @@ export function SignupForm({ onSwitchToLogin }: Props) {
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-border bg-surface p-6">
-      <h1 className="mb-4 font-serif text-xl font-bold">Create your ctm account</h1>
+      <h1 className="mb-4 text-lg font-bold sm:text-xl">Create your ctm account</h1>
       <form onSubmit={onSubmit} className="space-y-3">
         <Field label="Email" type="email" value={username} onChange={setUsername} autoComplete="email" />
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="new-password" />
@@ -94,7 +94,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
-        className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
+        className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-sm text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
       />
     </label>
   );

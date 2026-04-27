@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -16,15 +17,27 @@ import (
 // a shell prompt feels live without hammering tmux / the browser.
 const paneTick = 1 * time.Second
 
+// Default and upper bound for the scrollback window captured above
+// the visible pane area. Detached tmux sessions often collapse to a
+// small geometry (e.g. 55×28); without scrollback the viewer shows
+// only the last ~28 rows no matter how much output has been
+// produced. 500 lines is a generous debugging window; 10 000 caps a
+// pathological `?history=` query from shipping megabytes per tick.
+const (
+	defaultPaneScrollback = 500
+	maxPaneScrollback     = 10_000
+)
+
 // TmuxPaneCapturer is the narrow slice of *tmux.Client this handler
 // needs. A package-local interface keeps the api package decoupled
 // from internal/tmux (which would otherwise pull os/exec into every
 // api test binary) and makes the handler trivially faked.
 type TmuxPaneCapturer interface {
-	// CapturePane returns the raw output of
-	//   tmux capture-pane -e -p -t <name>
-	// -e preserves SGR escape sequences (colour); -p prints to stdout.
-	CapturePane(name string) (string, error)
+	// CapturePaneHistory returns the raw output of
+	//   tmux capture-pane -e -p -J -t <name> -S -<scrollback>
+	// scrollback lines above the visible pane, with -e preserving
+	// SGR, -p writing to stdout, and -J joining wrapped lines.
+	CapturePaneHistory(name string, scrollback int) (string, error)
 }
 
 // PaneStream returns a GET /events/session/{name}/pane handler that
@@ -40,14 +53,26 @@ type TmuxPaneCapturer interface {
 //   - Emits a single initial frame on connect so the UI has something
 //     to render immediately (no 1s blank state).
 //   - Exits cleanly when the client disconnects (r.Context().Done())
-//     or when the pane disappears (CapturePane returns an error twice
-//     in a row — we tolerate one transient miss).
+//     or when the pane disappears (CapturePaneHistory returns an
+//     error twice in a row — we tolerate one transient miss).
+//   - `?history=<N>` query param overrides the default scrollback
+//     window. Clamped to [0, maxPaneScrollback]. 0 = visible-only.
 func PaneStream(tmux TmuxPaneCapturer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if name == "" {
 			http.Error(w, "missing session name", http.StatusBadRequest)
 			return
+		}
+
+		scrollback := defaultPaneScrollback
+		if raw := r.URL.Query().Get("history"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+				if n > maxPaneScrollback {
+					n = maxPaneScrollback
+				}
+				scrollback = n
+			}
 		}
 
 		flusher, ok := w.(http.Flusher)
@@ -103,7 +128,7 @@ func PaneStream(tmux TmuxPaneCapturer) http.HandlerFunc {
 
 		// Initial capture + emission — so the UI has a first frame
 		// without waiting 1s.
-		if out, err := tmux.CapturePane(name); err == nil {
+		if out, err := tmux.CapturePaneHistory(name, scrollback); err == nil {
 			if !emit(out) {
 				return
 			}
@@ -116,7 +141,7 @@ func PaneStream(tmux TmuxPaneCapturer) http.HandlerFunc {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				out, err := tmux.CapturePane(name)
+				out, err := tmux.CapturePaneHistory(name, scrollback)
 				if err != nil {
 					consecutiveErrs++
 					if consecutiveErrs >= 2 {

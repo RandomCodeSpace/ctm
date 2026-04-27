@@ -12,6 +12,14 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Force one copy of react/react-dom across the bundle. Without this,
+    // a `link:`-installed sibling package (e.g. @ossrandom/design-system
+    // resolved against its own node_modules) brings a second react,
+    // which React 19 rejects with "A React Element from an older
+    // version of React was rendered". Dedupe makes Vite resolve these
+    // modules to ctm/ui's node_modules regardless of where the import
+    // originates.
+    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },
   server: {
     port: 5173,

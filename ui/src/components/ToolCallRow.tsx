@@ -57,13 +57,13 @@ export function ToolCallRow({ row, showSession }: ToolCallRowProps) {
   return (
     <article
       className={cn(
-        "ctm-row-in flex gap-4 border-l-[3px] border-transparent px-4 py-3 border-b border-b-border",
+        "flex gap-4 border-l-[3px] border-transparent px-4 py-3 border-b border-b-border",
         isError && "border-l-alert-ember bg-alert-ember/5",
       )}
     >
       <time
         dateTime={row.ts}
-        className="w-[60px] shrink-0 pt-0.5 font-serif text-[11px] uppercase tracking-[0.18em] text-fg-dim"
+        className="w-[60px] shrink-0 pt-0.5 text-[11px] uppercase tracking-[0.18em] text-fg-dim"
         title={row.ts}
       >
         {relativeTime(row.ts)}

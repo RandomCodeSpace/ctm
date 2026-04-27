@@ -78,6 +78,64 @@ func TestStore_WipesWhenUserFileGone(t *testing.T) {
 	}
 }
 
+func TestLookup_ExpiredReturnsFalse(t *testing.T) {
+	withTempHome(t)
+	s := auth.NewStoreWithTTL(time.Second)
+	base := time.Unix(1_700_000_000, 0)
+	s.SetClockForTest(func() time.Time { return base })
+	tok, err := s.Create("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Advance past the TTL.
+	s.SetClockForTest(func() time.Time { return base.Add(2 * time.Second) })
+	if user, ok := s.Lookup(tok); ok {
+		t.Fatalf("Lookup after TTL expiry = (%q, true), want (\"\", false)", user)
+	}
+}
+
+func TestLookup_WithinTTLReturnsTrue(t *testing.T) {
+	withTempHome(t)
+	s := auth.NewStoreWithTTL(time.Minute)
+	base := time.Unix(1_700_000_000, 0)
+	s.SetClockForTest(func() time.Time { return base })
+	tok, err := s.Create("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Advance by less than the TTL.
+	s.SetClockForTest(func() time.Time { return base.Add(30 * time.Second) })
+	user, ok := s.Lookup(tok)
+	if !ok || user != "alice" {
+		t.Fatalf("Lookup within TTL = (%q, %v), want (\"alice\", true)", user, ok)
+	}
+}
+
+func TestExpiredTokenIsEvicted(t *testing.T) {
+	withTempHome(t)
+	s := auth.NewStoreWithTTL(time.Second)
+	base := time.Unix(1_700_000_000, 0)
+	s.SetClockForTest(func() time.Time { return base })
+	tok, err := s.Create("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.EntryCountForTest(); got != 1 {
+		t.Fatalf("pre-expiry entry count = %d, want 1", got)
+	}
+	s.SetClockForTest(func() time.Time { return base.Add(2 * time.Second) })
+	if _, ok := s.Lookup(tok); ok {
+		t.Fatal("expired Lookup returned ok=true")
+	}
+	if got := s.EntryCountForTest(); got != 0 {
+		t.Fatalf("post-expiry entry count = %d, want 0 (expected lazy eviction)", got)
+	}
+	// Second lookup should still report false.
+	if _, ok := s.Lookup(tok); ok {
+		t.Fatal("second Lookup of expired token returned ok=true")
+	}
+}
+
 func TestStore_Concurrent(t *testing.T) {
 	withTempHome(t)
 	s := auth.NewStore()

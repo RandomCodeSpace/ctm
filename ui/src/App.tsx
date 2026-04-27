@@ -1,7 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Navigate, RouterProvider, createBrowserRouter } from "react-router";
-import { useMemo } from "react";
-import { ThemeProvider } from "@/hooks/useTheme";
+import { useMemo, type ReactNode } from "react";
+import {
+  ThemeProvider as DSThemeProvider,
+  ToastRegion,
+} from "@ossrandom/design-system";
+import "@ossrandom/design-system/styles.css";
+import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { AuthProvider } from "@/components/AuthProvider";
 import { SseProvider } from "@/components/SseProvider";
 import { Dashboard } from "@/routes/Dashboard";
@@ -9,6 +14,21 @@ import { DoctorPanel } from "@/routes/DoctorPanel";
 import { FeedFullscreen } from "@/routes/FeedFullscreen";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { AuthGate } from "@/routes/AuthGate";
+
+// Bridges ctm's useTheme (system/light/dark cycle, localStorage-backed)
+// to the design-system's ThemeProvider, which only takes a resolved
+// "light"|"dark" mode. Keeps a single source of truth — ctm owns the
+// preference, the design-system owns the data-theme attribute writes
+// and component-level token resolution.
+function DesignSystemBridge({ children }: { children: ReactNode }) {
+  const { resolved } = useTheme();
+  return (
+    <DSThemeProvider mode={resolved}>
+      {children}
+      <ToastRegion />
+    </DSThemeProvider>
+  );
+}
 
 /*
  * Routing intent: in two-pane mode (>=768px) the Dashboard owns both
@@ -60,16 +80,18 @@ export function App() {
 
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <SseProvider>
-            <AuthGate>
-              <ConnectionBanner />
-              <RouterProvider router={router} />
-            </AuthGate>
-          </SseProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <DesignSystemBridge>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <SseProvider>
+              <AuthGate>
+                <ConnectionBanner />
+                <RouterProvider router={router} />
+              </AuthGate>
+            </SseProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </DesignSystemBridge>
     </ThemeProvider>
   );
 }

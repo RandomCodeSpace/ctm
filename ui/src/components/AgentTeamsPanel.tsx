@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@ossrandom/design-system";
 import { useTeams, type Team, type TeamMember } from "@/hooks/useTeams";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -85,7 +85,7 @@ function TeamCard({ team }: { team: Team }) {
           )}
         />
         <StatusChip status={team.status} />
-        <h3 className="min-w-0 flex-1 truncate font-serif text-sm font-semibold text-fg">
+        <h3 className="min-w-0 flex-1 truncate text-xs font-semibold text-fg">
           {team.name}
         </h3>
         <span className="shrink-0 font-mono text-[11px] tabular-nums text-fg-dim">

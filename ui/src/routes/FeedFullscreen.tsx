@@ -20,7 +20,7 @@ export function FeedFullscreen() {
           >
             <ArrowLeft size={16} aria-hidden />
           </Link>
-          <h1 className="font-serif text-xl font-bold tracking-tight">
+          <h1 className="text-lg font-bold tracking-tight sm:text-xl">
             Live feed
           </h1>
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">

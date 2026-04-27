@@ -37,7 +37,7 @@ export function PaneView({ sessionName, enabled = true }: PaneViewProps) {
             ended
               ? "bg-fg-dim"
               : connected
-                ? "bg-live-dot ctm-live-pulse"
+                ? "bg-live-dot"
                 : "bg-fg-muted",
           )}
         />

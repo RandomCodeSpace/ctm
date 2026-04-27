@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@ossrandom/design-system";
 import {
   useDoctor,
   type DoctorCheck,
@@ -29,7 +29,7 @@ export function DoctorPanel() {
         <div className="flex items-center gap-3">
           <Link
             to="/"
-            className="font-serif text-xl font-bold tracking-tight text-fg hover:text-fg-muted transition-colors"
+            className="text-lg font-bold tracking-tight text-fg hover:text-fg-muted transition-colors sm:text-xl"
           >
             ctm
           </Link>

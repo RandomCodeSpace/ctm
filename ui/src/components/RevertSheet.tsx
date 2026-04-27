@@ -1,14 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
+import { Drawer, Button } from "@ossrandom/design-system";
 import {
   ApiError,
   postRevert,
@@ -55,12 +46,10 @@ function isDirtyBody(b: unknown): b is RevertDirty {
 export function RevertSheet({ sessionName, checkpoint, onClose }: RevertSheetProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "confirm" });
 
-  // Reset phase whenever the checkpoint changes (re-open the sheet).
   useEffect(() => {
     if (checkpoint) setPhase({ kind: "confirm" });
   }, [checkpoint]);
 
-  // Auto-close on success after 2s.
   useEffect(() => {
     if (phase.kind !== "success") return;
     const t = setTimeout(onClose, 2000);
@@ -102,132 +91,101 @@ export function RevertSheet({ sessionName, checkpoint, onClose }: RevertSheetPro
   const open = checkpoint !== null;
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent
-        side="right"
-        className="bg-surface text-fg w-full sm:max-w-md border-l border-border"
-      >
-        {checkpoint && (
-          <>
-            <SheetHeader className="border-b border-border">
-              <SheetTitle className="font-serif text-xl text-fg">
-                Revert to checkpoint
-              </SheetTitle>
-              <SheetDescription className="text-fg-muted">
-                Hard-resets the workdir. Newer commits become unreachable.
-              </SheetDescription>
-            </SheetHeader>
+    <Drawer
+      open={open}
+      onClose={onClose}
+      placement="right"
+      width="min(100vw, 28rem)"
+      title="Revert to checkpoint"
+      description="Hard-resets the workdir. Newer commits become unreachable."
+      footer={
+        <RevertFooter
+          phase={phase}
+          onClose={onClose}
+          onSend={send}
+        />
+      }
+    >
+      {checkpoint && (
+        <div className="space-y-4 px-4 py-6">
+          <div className="rounded border border-border bg-surface-2 p-3">
+            <p className="font-mono text-xs text-accent-gold">
+              {checkpoint.short_sha || checkpoint.sha.slice(0, 7)}
+            </p>
+            <p className="mt-1 text-sm text-fg">{checkpoint.subject}</p>
+            <p className="mt-1 text-xs text-fg-dim">
+              <time dateTime={checkpoint.ts}>{relativeTime(checkpoint.ts)}</time>
+            </p>
+          </div>
 
-            <div className="space-y-4 px-4 py-6">
-              <div className="rounded border border-border bg-surface-2 p-3">
-                <p className="font-mono text-xs text-accent-gold">
-                  {checkpoint.short_sha || checkpoint.sha.slice(0, 7)}
-                </p>
-                <p className="mt-1 text-sm text-fg">{checkpoint.subject}</p>
-                <p className="mt-1 text-xs text-fg-dim">
-                  <time dateTime={checkpoint.ts}>{relativeTime(checkpoint.ts)}</time>
-                </p>
-              </div>
-
-              <PhaseBody
-                phase={phase}
-                onRetry={() => send(false)}
-                onStashAndRevert={() => send(true)}
-              />
-            </div>
-
-            <SheetFooter className="border-t border-border">
-              {phase.kind === "confirm" && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onClose}
-                    className="border-border bg-transparent text-fg hover:bg-surface-2"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => send(false)}
-                    className="bg-accent-gold text-bg hover:opacity-90"
-                  >
-                    Revert
-                  </Button>
-                </>
-              )}
-              {phase.kind === "dirty" && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onClose}
-                    className="border-border bg-transparent text-fg hover:bg-surface-2"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => send(true)}
-                    className="bg-accent-gold text-bg hover:opacity-90"
-                  >
-                    Stash first then revert
-                  </Button>
-                </>
-              )}
-              {(phase.kind === "submitting" || phase.kind === "stashing") && (
-                <Button
-                  type="button"
-                  disabled
-                  className="bg-accent-gold text-bg opacity-70"
-                >
-                  <Loader2 size={14} className="animate-spin" aria-hidden />
-                  {phase.kind === "stashing" ? "Stashing & reverting…" : "Reverting…"}
-                </Button>
-              )}
-              {phase.kind === "network" && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onClose}
-                    className="border-border bg-transparent text-fg hover:bg-surface-2"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => send(false)}
-                    className="bg-accent-gold text-bg hover:opacity-90"
-                  >
-                    Retry
-                  </Button>
-                </>
-              )}
-              {(phase.kind === "success" || phase.kind === "fatal_422") && (
-                <Button
-                  type="button"
-                  onClick={onClose}
-                  className="bg-accent-gold text-bg hover:opacity-90"
-                >
-                  Close
-                </Button>
-              )}
-            </SheetFooter>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
+          <PhaseBody phase={phase} />
+        </div>
+      )}
+    </Drawer>
   );
 }
 
-interface PhaseBodyProps {
+function RevertFooter({
+  phase,
+  onClose,
+  onSend,
+}: {
   phase: Phase;
-  onRetry: () => void;
-  onStashAndRevert: () => void;
+  onClose: () => void;
+  onSend: (stashFirst: boolean) => void;
+}) {
+  if (phase.kind === "confirm") {
+    return (
+      <>
+        <Button variant="secondary" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="danger" size="sm" onClick={() => onSend(false)}>
+          Revert
+        </Button>
+      </>
+    );
+  }
+  if (phase.kind === "dirty") {
+    return (
+      <>
+        <Button variant="secondary" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="danger" size="sm" onClick={() => onSend(true)}>
+          Stash first then revert
+        </Button>
+      </>
+    );
+  }
+  if (phase.kind === "submitting" || phase.kind === "stashing") {
+    return (
+      <Button variant="danger" size="sm" disabled loading>
+        {phase.kind === "stashing" ? "Stashing & reverting…" : "Reverting…"}
+      </Button>
+    );
+  }
+  if (phase.kind === "network") {
+    return (
+      <>
+        <Button variant="secondary" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="danger" size="sm" onClick={() => onSend(false)}>
+          Retry
+        </Button>
+      </>
+    );
+  }
+  // success | fatal_422
+  return (
+    <Button variant="primary" size="sm" onClick={onClose}>
+      Close
+    </Button>
+  );
 }
 
-function PhaseBody({ phase }: PhaseBodyProps) {
+function PhaseBody({ phase }: { phase: Phase }) {
   switch (phase.kind) {
     case "confirm":
       return (
@@ -311,3 +269,4 @@ function PhaseBody({ phase }: PhaseBodyProps) {
       );
   }
 }
+

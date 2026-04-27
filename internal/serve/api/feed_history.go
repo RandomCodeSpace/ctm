@@ -166,12 +166,37 @@ func FeedHistory(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 	}
 }
 
-// resolveNameToUUID scans logDir for *.jsonl files and asks the
-// UUID→name resolver for each until one matches `name`. Returns the
-// matching UUID or ("", false).
+// nameToUUIDResolver is the optional direct name→uuid lookup. When a
+// UUIDNameResolver also implements this, resolveNameToUUID consults it
+// first so the authoritative sessions.json mapping wins over the log-
+// directory scan. Without this, sessions that had an older claude
+// session_id (a dead log file still sitting in logDir) would race with
+// the live one and could shadow it when filenames sort before the live
+// UUID. See resolveNameToUUID below.
+type nameToUUIDResolver interface {
+	ResolveName(name string) (uuid string, ok bool)
+}
+
+// resolveNameToUUID returns the log UUID for a human session name.
+//
+// Order of resolution:
+//  1. If resolver implements nameToUUIDResolver (production: the
+//     projection-backed logsUUIDResolver), use that directly. This is
+//     the authoritative path and handles the multi-historical-log-
+//     file case where a session has cycled through several claude
+//     session_ids.
+//  2. Fallback: scan logDir for *.jsonl files and reverse-map each
+//     via ResolveUUID. Preserves behaviour for orphan UUIDs whose
+//     session isn't in the projection (tests, migration, manual
+//     overrides).
 func resolveNameToUUID(resolver UUIDNameResolver, logDir, name string) (string, bool) {
 	if resolver == nil {
 		return "", false
+	}
+	if nr, ok := resolver.(nameToUUIDResolver); ok {
+		if uuid, ok := nr.ResolveName(name); ok {
+			return uuid, true
+		}
 	}
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
