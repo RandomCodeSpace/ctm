@@ -71,6 +71,69 @@ func (h historyResolver) ResolveUUID(u string) (string, bool) {
 	return "", false
 }
 
+// projectionResolver implements both ResolveUUID (workdir-fallback
+// semantics: every uuid reverse-maps to `name`) and ResolveName (the
+// authoritative direct lookup). Used by TestResolveNameToUUID_Prefers
+// ProjectionOverLexicalScan to reproduce the codeiq-style bug where
+// a lexically-earlier dead log file shadowed the live one.
+type projectionResolver struct {
+	liveUUID string
+	name     string
+}
+
+func (p projectionResolver) ResolveUUID(u string) (string, bool) { return p.name, true }
+func (p projectionResolver) ResolveName(n string) (string, bool) {
+	if n == p.name {
+		return p.liveUUID, true
+	}
+	return "", false
+}
+
+func TestResolveNameToUUID_PrefersProjectionOverLexicalScan(t *testing.T) {
+	// Two log files under logDir. deadUUID sorts lexically before
+	// liveUUID; both reverse-map to "codeiq" via the workdir fallback
+	// (projectionResolver.ResolveUUID returns "codeiq" for any input).
+	// Without the direct-name lookup, resolveNameToUUID would return
+	// deadUUID and callers (Subagents, Teams, FeedHistory) would open
+	// the wrong file.
+	const (
+		deadUUID = "11111111-0000-0000-0000-000000000000"
+		liveUUID = "99999999-0000-0000-0000-000000000000"
+	)
+	dir := t.TempDir()
+	for _, u := range []string{deadUUID, liveUUID} {
+		if err := os.WriteFile(filepath.Join(dir, u+".jsonl"), []byte{}, 0o600); err != nil {
+			t.Fatalf("create %s: %v", u, err)
+		}
+	}
+
+	got, ok := resolveNameToUUID(projectionResolver{liveUUID: liveUUID, name: "codeiq"}, dir, "codeiq")
+	if !ok {
+		t.Fatalf("resolveNameToUUID: ok=false, want true")
+	}
+	if got != liveUUID {
+		t.Errorf("resolveNameToUUID = %q, want %q (projection/live uuid, not the lexically-earlier dead file)", got, liveUUID)
+	}
+}
+
+func TestResolveNameToUUID_FallsBackToScanWhenNoDirectLookup(t *testing.T) {
+	// historyResolver only implements ResolveUUID — no direct name
+	// lookup — so the scan path must still work for orphan UUIDs /
+	// legacy callers.
+	const uuid = "aaaaaaaa-0000-0000-0000-000000000001"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, uuid+".jsonl"), []byte{}, 0o600); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, ok := resolveNameToUUID(historyResolver{uuid: uuid, name: "alpha"}, dir, "alpha")
+	if !ok {
+		t.Fatalf("resolveNameToUUID: ok=false, want true")
+	}
+	if got != uuid {
+		t.Errorf("resolveNameToUUID = %q, want %q", got, uuid)
+	}
+}
+
 func TestFeedHistory_BeforeInMiddleReturnsOlder(t *testing.T) {
 	dir := t.TempDir()
 	const uuid = "aaaaaaaa-0000-0000-0000-000000000001"

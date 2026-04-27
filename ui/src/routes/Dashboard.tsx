@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { Settings, SquarePlus, Stethoscope } from "lucide-react";
+import { PageHeader, IconButton } from "@ossrandom/design-system";
 import { CostChart } from "@/components/CostChart";
 import { NewSessionModal } from "@/components/NewSessionModal";
 import { QuotaStrip } from "@/components/QuotaStrip";
@@ -64,38 +65,39 @@ export function Dashboard() {
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
-      <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-        <h1 className="font-serif text-xl font-bold tracking-tight">ctm</h1>
-        <div className="flex items-center gap-1">
-          <Link
-            to="/doctor"
-            aria-label="Open doctor diagnostics"
-            title="Doctor"
-            className="inline-flex h-8 w-8 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
-          >
-            <Stethoscope size={16} aria-hidden />
-          </Link>
-          <button
-            type="button"
-            onClick={() => setNewSessionOpen(true)}
-            aria-label="New session"
-            title="New session"
-            className="inline-flex h-8 w-8 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
-          >
-            <SquarePlus size={16} aria-hidden />
-          </button>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Open settings"
-            title="Settings"
-            className="inline-flex h-8 w-8 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
-          >
-            <Settings size={16} aria-hidden />
-          </button>
-          <ThemeToggle />
-        </div>
-      </header>
+      <PageHeader
+        size="sm"
+        inlineSubtitle
+        className="shrink-0"
+        title="ctm"
+        subtitle="claude tmux manager"
+        actions={
+          <>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label="Open doctor diagnostics"
+              icon={<Stethoscope size={14} aria-hidden />}
+              onClick={() => navigate("/doctor")}
+            />
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label="New session"
+              icon={<SquarePlus size={14} aria-hidden />}
+              onClick={() => setNewSessionOpen(true)}
+            />
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label="Open settings"
+              icon={<Settings size={14} aria-hidden />}
+              onClick={() => setSettingsOpen(true)}
+            />
+            <ThemeToggle />
+          </>
+        }
+      />
       <SettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

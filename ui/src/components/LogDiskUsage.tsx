@@ -1,4 +1,4 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@ossrandom/design-system";
 import { useLogsUsage } from "@/hooks/useLogsUsage";
 import { humanBytes, relativeTime } from "@/lib/format";
 

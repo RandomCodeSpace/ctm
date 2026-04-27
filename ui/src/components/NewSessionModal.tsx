@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Dialog as DialogPrimitive } from "radix-ui";
-import { X } from "lucide-react";
+import { Modal, Input, Textarea, Button } from "@ossrandom/design-system";
 import { ApiError } from "@/lib/api";
 import {
   isConflict,
   useCreateSession,
   type CreateConflict,
 } from "@/hooks/useCreateSession";
-import { cn } from "@/lib/utils";
 
 interface NewSessionModalProps {
   open: boolean;
@@ -69,214 +67,188 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
   const canSubmit = workdir.trim().length > 0 && !create.isPending;
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <DialogPrimitive.Content
-          className={cn(
-            "fixed left-[50%] top-[15%] z-50 w-full max-w-md translate-x-[-50%]",
-            "overflow-hidden rounded-lg border border-border bg-surface shadow-lg outline-none",
-            "p-4",
-          )}
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="sm"
+      title="New session"
+      footer={
+        collision ? (
+          <CollisionFooter
+            collision={collision}
+            renaming={renaming}
+            canSubmit={canSubmit}
+            submitting={create.isPending}
+            onClose={onClose}
+            onGoExisting={() => {
+              navigate(`/s/${encodeURIComponent(collision.session.name)}`);
+              onClose();
+            }}
+            onRename={() => setRenaming(true)}
+            onSubmit={handleSubmit}
+          />
+        ) : (
+          <>
+            <Button variant="secondary" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              type="submit"
+              disabled={!canSubmit}
+              loading={create.isPending}
+              onClick={handleSubmit}
+            >
+              Create
+            </Button>
+          </>
+        )
+      }
+    >
+      {collision ? (
+        <CollisionBody collision={collision} renaming={renaming} name={name} onName={setName} />
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSubmit) handleSubmit();
+          }}
         >
-          <div className="mb-3 flex items-center justify-between">
-            <DialogPrimitive.Title className="font-serif text-lg font-bold">
-              New session
-            </DialogPrimitive.Title>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className="rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
-            >
-              <X size={14} aria-hidden />
-            </button>
-          </div>
+          <div className="rcs-label" style={{ marginBottom: 4 }}>Workdir</div>
+          <Input
+            value={workdir}
+            onChange={(v) => setWorkdir(v)}
+            placeholder="/home/dev/projects/…"
+            autoFocus
+            size="sm"
+            aria-label="Workdir"
+          />
 
-          {collision ? (
-            <CollisionPanel
-              collision={collision}
-              name={name}
-              onName={setName}
-              onGoExisting={() => {
-                navigate(
-                  `/s/${encodeURIComponent(collision.session.name)}`,
-                );
-                onClose();
-              }}
-              onRename={() => {
-                setRenaming(true);
-              }}
-              renaming={renaming}
-              onSubmit={handleSubmit}
-              submitting={create.isPending}
-              canSubmit={canSubmit}
-            />
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (canSubmit) handleSubmit();
-              }}
-            >
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
-                Workdir
-              </label>
-              <input
-                type="text"
-                aria-label="Workdir"
-                value={workdir}
-                onChange={(e) => setWorkdir(e.target.value)}
-                placeholder="/home/dev/projects/…"
-                autoFocus
-                className="mb-2 block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
-              />
-
-              {recents.length > 0 && (
-                <div className="mb-3">
-                  <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-fg-dim">
-                    Recents
-                  </div>
-                  <ul className="space-y-1">
-                    {recents.map((r) => (
-                      <li key={r}>
-                        <button
-                          type="button"
-                          aria-label={r}
-                          onClick={() => setWorkdir(r)}
-                          className="block w-full truncate rounded px-2 py-1 text-left font-mono text-xs text-fg hover:bg-surface-2"
-                        >
-                          {r}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
-                Initial prompt <span className="font-normal normal-case tracking-normal text-fg-dim">(optional — sent after boot)</span>
-              </label>
-              <textarea
-                aria-label="Initial prompt"
-                value={initialPrompt}
-                onChange={(e) => setInitialPrompt(e.target.value)}
-                placeholder="e.g. review the diff on main and suggest follow-ups"
-                rows={3}
-                className="mb-3 block w-full resize-y rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
-              />
-
-              {errMsg && (
-                <div
-                  role="alert"
-                  className="mb-2 text-[11px] text-alert-ember"
-                >
-                  {errMsg}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded border border-border bg-surface px-3 py-1 text-xs text-fg hover:bg-surface-2"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!canSubmit}
-                  className="rounded border border-border bg-accent-gold px-3 py-1 text-xs font-semibold text-bg hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Create
-                </button>
-              </div>
-            </form>
+          {recents.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="rcs-label" style={{ marginBottom: 4 }}>Recents</div>
+              <ul role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: 0, padding: 0, listStyle: "none" }}>
+                {recents.map((r) => (
+                  <li key={r}>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      block
+                      aria-label={r}
+                      onClick={() => setWorkdir(r)}
+                    >
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left", width: "100%" }}>
+                        {r}
+                      </span>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+
+          <div className="rcs-label" style={{ marginTop: 16, marginBottom: 4 }}>
+            Initial prompt
+            <span style={{ marginLeft: 6, fontWeight: "normal", textTransform: "none", letterSpacing: 0, color: "var(--fg-3)" }}>
+              (optional — sent after boot)
+            </span>
+          </div>
+          <Textarea
+            value={initialPrompt}
+            onChange={(v) => setInitialPrompt(v)}
+            placeholder="e.g. review the diff on main and suggest follow-ups"
+            rows={3}
+            size="sm"
+            aria-label="Initial prompt"
+          />
+
+          {errMsg && (
+            <div role="alert" style={{ marginTop: 10, fontSize: 12, color: "var(--danger)" }}>
+              {errMsg}
+            </div>
+          )}
+        </form>
+      )}
+    </Modal>
   );
 }
 
-function CollisionPanel({
+function CollisionBody({
   collision,
+  renaming,
   name,
   onName,
-  onGoExisting,
-  onRename,
-  renaming,
-  onSubmit,
-  submitting,
-  canSubmit,
 }: {
   collision: CreateConflict;
+  renaming: boolean;
   name: string;
   onName: (v: string) => void;
-  onGoExisting: () => void;
-  onRename: () => void;
-  renaming: boolean;
-  onSubmit: () => void;
-  submitting: boolean;
-  canSubmit: boolean;
 }) {
   return (
-    <div role="alert" className="space-y-3">
-      <p className="text-sm text-fg">
+    <div role="alert" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <p style={{ margin: 0, fontSize: 14, color: "var(--fg-1)" }}>
         A session named{" "}
-        <code className="rounded bg-bg px-1 py-0.5 font-mono text-xs">
+        <code style={{ background: "var(--bg-2)", padding: "1px 4px", borderRadius: 3, fontFamily: "var(--font-mono)", fontSize: 12 }}>
           {collision.session.name}
         </code>{" "}
         already exists for{" "}
-        <code className="break-all font-mono text-xs">
+        <code style={{ fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all" }}>
           {collision.session.workdir}
         </code>
         .
       </p>
 
-      {renaming ? (
+      {renaming && (
         <div>
-          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
-            New name
-          </label>
-          <input
-            type="text"
-            aria-label="New name"
-            value={name}
-            onChange={(e) => onName(e.target.value)}
-            className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
-          />
+          <div className="rcs-label" style={{ marginBottom: 4 }}>New name</div>
+          <Input value={name} onChange={(v) => onName(v)} size="sm" aria-label="New name" />
         </div>
-      ) : null}
-
-      <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onGoExisting}
-          className="rounded border border-border bg-surface px-3 py-1 text-xs text-fg hover:bg-surface-2"
-        >
-          Go to existing
-        </button>
-        {renaming ? (
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!canSubmit || submitting}
-            className="rounded border border-border bg-accent-gold px-3 py-1 text-xs font-semibold text-bg hover:brightness-110 disabled:opacity-40"
-          >
-            Create
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onRename}
-            className="rounded border border-border bg-surface px-3 py-1 text-xs text-fg hover:bg-surface-2"
-          >
-            Rename
-          </button>
-        )}
-      </div>
+      )}
     </div>
+  );
+}
+
+function CollisionFooter({
+  collision: _collision,
+  renaming,
+  canSubmit,
+  submitting,
+  onClose: _onClose,
+  onGoExisting,
+  onRename,
+  onSubmit,
+}: {
+  collision: CreateConflict;
+  renaming: boolean;
+  canSubmit: boolean;
+  submitting: boolean;
+  onClose: () => void;
+  onGoExisting: () => void;
+  onRename: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <>
+      <Button variant="secondary" size="sm" onClick={onGoExisting}>
+        Go to existing
+      </Button>
+      {renaming ? (
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!canSubmit || submitting}
+          loading={submitting}
+          onClick={onSubmit}
+        >
+          Create
+        </Button>
+      ) : (
+        <Button variant="secondary" size="sm" onClick={onRename}>
+          Rename
+        </Button>
+      )}
+    </>
   );
 }
 

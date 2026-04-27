@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@ossrandom/design-system";
 import { useCost, type CostPoint, type CostWindow } from "@/hooks/useCost";
 import { cn } from "@/lib/utils";
 

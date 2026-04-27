@@ -1,15 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { Drawer, Button } from "@ossrandom/design-system";
 import { useLogout } from "@/hooks/useLogout";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import {
   useConfigGet,
   useConfigUpdate,
@@ -105,8 +97,6 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [form, setForm] = useState<FormState | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
 
-  // Re-seed the form every time the drawer opens so stale edits from a
-  // previous cancelled session don't bleed into a new one.
   useEffect(() => {
     if (open && data) {
       setForm({
@@ -118,10 +108,6 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     }
   }, [open, data]);
 
-  // Client-side validation mirrors the Go handler's range checks. The
-  // button disables instead of shouting so the user can correct the
-  // field without a round trip. Server re-validates — this is
-  // convenience, not trust boundary.
   const validationError = useMemo(() => {
     if (!form) return null;
     for (const meta of THRESHOLD_META) {
@@ -161,118 +147,109 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     save.kind === "restarting" ||
     validationError !== null;
 
+  const saving = save.kind === "saving" || save.kind === "restarting";
+
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent
-        side="right"
-        className="bg-surface text-fg w-full sm:max-w-md border-l border-border overflow-y-auto"
-      >
-        <SheetHeader className="border-b border-border">
-          <SheetTitle className="font-serif text-xl text-fg">Settings</SheetTitle>
-          <SheetDescription className="text-fg-muted">
-            Saving restarts the daemon. Open sessions keep running.
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="flex-1 space-y-6 px-4 py-6">
-          {isLoading || !form ? (
-            <p className="text-sm text-fg-muted" role="status">
-              Loading current settings…
-            </p>
-          ) : (
-            <>
-              <WebhookFields
-                form={form}
-                onChange={(patch) =>
-                  setForm((prev) => (prev ? { ...prev, ...patch } : prev))
-                }
-              />
-              <ThresholdFields
-                form={form}
-                onChange={(key, value) =>
-                  setForm((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          attention: { ...prev.attention, [key]: value },
-                        }
-                      : prev,
-                  )
-                }
-              />
-              {validationError && (
-                <p
-                  role="alert"
-                  className="border-l-[3px] border-alert-ember pl-3 text-sm text-alert-ember"
-                >
-                  {validationError}
-                </p>
-              )}
-              {save.kind === "restarting" && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="rounded border border-border bg-surface-2 p-3"
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-live-dot">
-                    Daemon restarting…
-                  </p>
-                  <p className="mt-1 text-xs text-fg-dim">
-                    Keep this tab open. The banner will clear once ctm reconnects.
-                  </p>
-                </div>
-              )}
-              {save.kind === "error" && (
-                <p
-                  role="alert"
-                  className="border-l-[3px] border-alert-ember pl-3 text-sm text-alert-ember"
-                >
-                  {save.message}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-
-        <section className="mt-2 border-t border-border px-4 pt-4 pb-2">
-          <button
-            type="button"
-            onClick={() => logout.mutate()}
-            disabled={logout.isPending}
-            className="inline-flex items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-xs text-fg hover:bg-surface-2 disabled:opacity-40"
-          >
-            <LogOut size={14} aria-hidden />
-            Log out
-          </button>
-        </section>
-
-        <SheetFooter className="border-t border-border">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            className="border-border bg-transparent text-fg hover:bg-surface-2"
-          >
+    <Drawer
+      open={open}
+      onClose={onClose}
+      placement="right"
+      width="min(100vw, 28rem)"
+      title="Settings"
+      description="Saving restarts the daemon. Open sessions keep running."
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Close
           </Button>
           <Button
-            type="button"
+            variant="danger"
+            size="sm"
             onClick={handleSave}
             disabled={disabled}
-            className="bg-accent-gold text-bg hover:opacity-90 disabled:opacity-50"
+            loading={saving}
           >
-            {save.kind === "saving" || save.kind === "restarting" ? (
-              <>
-                <Loader2 size={14} className="animate-spin" aria-hidden />
-                {save.kind === "saving" ? "Saving…" : "Restarting…"}
-              </>
-            ) : (
-              "Save & restart daemon"
-            )}
+            {save.kind === "saving"
+              ? "Saving…"
+              : save.kind === "restarting"
+                ? "Restarting…"
+                : "Save & restart daemon"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </>
+      }
+    >
+      <div className="space-y-6 px-4 py-6">
+        {isLoading || !form ? (
+          <p className="text-sm text-fg-muted" role="status">
+            Loading current settings…
+          </p>
+        ) : (
+          <>
+            <WebhookFields
+              form={form}
+              onChange={(patch) =>
+                setForm((prev) => (prev ? { ...prev, ...patch } : prev))
+              }
+            />
+            <ThresholdFields
+              form={form}
+              onChange={(key, value) =>
+                setForm((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        attention: { ...prev.attention, [key]: value },
+                      }
+                    : prev,
+                )
+              }
+            />
+            {validationError && (
+              <p
+                role="alert"
+                className="border-l-[3px] border-alert-ember pl-3 text-sm text-alert-ember"
+              >
+                {validationError}
+              </p>
+            )}
+            {save.kind === "restarting" && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded border border-border bg-surface-2 p-3"
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-live-dot">
+                  Daemon restarting…
+                </p>
+                <p className="mt-1 text-xs text-fg-dim">
+                  Keep this tab open. The banner will clear once ctm reconnects.
+                </p>
+              </div>
+            )}
+            {save.kind === "error" && (
+              <p
+                role="alert"
+                className="border-l-[3px] border-alert-ember pl-3 text-sm text-alert-ember"
+              >
+                {save.message}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <section className="mt-2 border-t border-border px-4 pt-4 pb-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+          iconLeft={<LogOut size={14} aria-hidden />}
+        >
+          Log out
+        </Button>
+      </section>
+    </Drawer>
   );
 }
 

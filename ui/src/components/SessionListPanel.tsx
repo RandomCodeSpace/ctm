@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@ossrandom/design-system";
 import { SessionCard } from "@/components/SessionCard";
 import {
   sortSessions,

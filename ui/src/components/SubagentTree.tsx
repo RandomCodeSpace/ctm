@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@ossrandom/design-system";
 import { useSubagents, type SubagentNode } from "@/hooks/useSubagents";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";

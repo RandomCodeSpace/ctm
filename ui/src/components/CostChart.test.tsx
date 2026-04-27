@@ -62,9 +62,9 @@ describe("CostChart", () => {
     ) as unknown as typeof globalThis.fetch;
 
     const { container } = renderWithQuery(<CostChart />);
-    // Skeleton uses data-slot="skeleton".
+    // design-system Skeleton renders with class `rcs-skeleton`.
     await waitFor(() => {
-      expect(container.querySelector('[data-slot="skeleton"]')).toBeTruthy();
+      expect(container.querySelector(".rcs-skeleton")).toBeTruthy();
     });
   });
 

@@ -8,8 +8,11 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"math"
+	"net"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
@@ -103,12 +106,27 @@ func AuthSignup(store *auth.Store) http.HandlerFunc {
 	}
 }
 
-// AuthLogin returns POST /api/auth/login.
-func AuthLogin(store *auth.Store) http.HandlerFunc {
+// AuthLogin returns POST /api/auth/login. The limiter protects the
+// argon2id verify path from brute-force/DoS; a successful login
+// resets the IP's window so legitimate users aren't locked out
+// after a typo.
+func AuthLogin(store *auth.Store, limiter *auth.Limiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+			return
+		}
+		ip := clientIP(r)
+		if ok, retryAfter := limiter.Allow(ip); !ok {
+			secs := int(math.Ceil(retryAfter.Seconds()))
+			if secs < 1 {
+				secs = 1
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(secs))
+			slog.Info("auth login reject", "reason", "rate_limited", "ip", ip)
+			writeInputErr(w, http.StatusTooManyRequests, "rate_limited",
+				"too many login attempts; try again later")
 			return
 		}
 		var body authCredsBody
@@ -133,6 +151,7 @@ func AuthLogin(store *auth.Store) http.HandlerFunc {
 				"username or password does not match")
 			return
 		}
+		limiter.Reset(ip)
 		tok, err := store.Create(u.Username)
 		if err != nil {
 			writeInputErr(w, http.StatusInternalServerError, "session_failed", err.Error())
@@ -145,6 +164,18 @@ func AuthLogin(store *auth.Store) http.HandlerFunc {
 			"username": u.Username,
 		})
 	}
+}
+
+// clientIP returns the host portion of r.RemoteAddr. We deliberately
+// do NOT honour X-Forwarded-For: behind the reverse proxy the real
+// source IP should reach us via RemoteAddr, and trusting XFF blindly
+// would let any client spoof the rate-limit key.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // AuthLogout returns POST /api/auth/logout.

@@ -629,7 +629,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// gated to prevent CSRF. Logout requires a valid session.
 	mux.Handle("GET /api/auth/status", api.AuthStatus(s.sessions))
 	mux.Handle("POST /api/auth/signup", api.RequireOriginFunc(allowedOrigins, api.AuthSignup(s.sessions)))
-	mux.Handle("POST /api/auth/login", api.RequireOriginFunc(allowedOrigins, api.AuthLogin(s.sessions)))
+	loginLimiter := auth.NewLimiter(5, 60*time.Second)
+	mux.Handle("POST /api/auth/login", api.RequireOriginFunc(allowedOrigins, api.AuthLogin(s.sessions, loginLimiter)))
 	mux.Handle("POST /api/auth/logout", authHF(api.AuthLogout(s.sessions)))
 
 	mux.Handle("POST /api/sessions/{name}/kill",
@@ -860,18 +861,25 @@ func (c createSpawner) Spawn(name, workdir string) (session.Session, error) {
 }
 
 // SendInitialPrompt fires `text` into the new session's pane after
-// claude has had time to boot + render its input prompt. Runs in a
-// goroutine — fire-and-forget; errors are logged, not returned.
+// claude has rendered its input prompt. Runs in a goroutine —
+// fire-and-forget; errors are logged, not returned.
 //
-// 8s is empirical: 3s was too fast — the text landed in claude's
-// buffer but the Enter keybind fired before the TUI had attached
-// its input handler, so the prompt appeared on screen but was
-// never submitted. 8s reliably catches the post-splash prompt on
-// cold-start machines.
+// Readiness is detected by polling `tmux capture-pane` until two
+// consecutive captures are byte-identical and non-empty, bounded
+// by a 15s ceiling. This replaces the old fixed 8s sleep, which
+// was both too short on slow cold-starts and wasted latency on
+// fast machines. On timeout we still attempt the send — better to
+// race claude's input handler than silently drop the prompt.
 func (c createSpawner) SendInitialPrompt(name, text string) {
 	go func() {
-		time.Sleep(8 * time.Second)
 		target := name + ":0.0"
+		start := time.Now()
+		err := waitForPaneReady(context.Background(), c.tmux, target, waitOpts{})
+		if err != nil {
+			slog.Warn("initial prompt: pane readiness timed out; sending anyway", "session", name)
+		} else {
+			slog.Info("initial prompt: pane ready", "after_ms", time.Since(start).Milliseconds())
+		}
 		if err := c.tmux.SendKeys(target, text); err != nil {
 			slog.Warn("initial prompt send failed", "session", name, "err", err.Error())
 			return
@@ -904,6 +912,22 @@ func (a inputSessionSource) TmuxAlive(name string) bool {
 }
 
 type logsUUIDResolver struct{ proj *ingest.Projection }
+
+// ResolveName maps a human session name to the log UUID recorded in
+// the sessions projection (sessions.json). This is the authoritative
+// path — log-directory scans are a fallback for orphan UUIDs and can
+// pick a stale historical transcript if a session has cycled through
+// several claude session_ids.
+func (r logsUUIDResolver) ResolveName(name string) (string, bool) {
+	if r.proj == nil || name == "" {
+		return "", false
+	}
+	s, ok := r.proj.Get(name)
+	if !ok || s.UUID == "" {
+		return "", false
+	}
+	return s.UUID, true
+}
 
 func (r logsUUIDResolver) ResolveUUID(uuid string) (string, bool) {
 	if r.proj == nil || uuid == "" {

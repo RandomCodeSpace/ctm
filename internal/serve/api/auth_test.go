@@ -9,10 +9,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/RandomCodeSpace/ctm/internal/serve/api"
 	"github.com/RandomCodeSpace/ctm/internal/serve/auth"
 )
+
+// testLimiter returns a generously-sized limiter so tests that aren't
+// specifically exercising rate-limiting are never throttled.
+func testLimiter() *auth.Limiter {
+	return auth.NewLimiter(1000, time.Second)
+}
 
 // ---------- helpers --------------------------------------------------------
 
@@ -156,7 +163,7 @@ func TestLogin_HappyPath(t *testing.T) {
 	enc, _ := auth.Hash("password123")
 	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
-	h := api.AuthLogin(store)
+	h := api.AuthLogin(store, testLimiter())
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
 		map[string]string{"username": "alice@example.com", "password": "password123"}))
@@ -175,7 +182,7 @@ func TestLogin_BadPassword(t *testing.T) {
 	enc, _ := auth.Hash("password123")
 	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
-	h := api.AuthLogin(store)
+	h := api.AuthLogin(store, testLimiter())
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
 		map[string]string{"username": "alice@example.com", "password": "wrong"}))
@@ -192,7 +199,7 @@ func TestLogin_UnknownUsername(t *testing.T) {
 	enc, _ := auth.Hash("password123")
 	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
 	store := auth.NewStore()
-	h := api.AuthLogin(store)
+	h := api.AuthLogin(store, testLimiter())
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
 		map[string]string{"username": "mallory@example.com", "password": "password123"}))
@@ -204,7 +211,7 @@ func TestLogin_UnknownUsername(t *testing.T) {
 func TestLogin_NotRegistered(t *testing.T) {
 	authTempHome(t)
 	store := auth.NewStore()
-	h := api.AuthLogin(store)
+	h := api.AuthLogin(store, testLimiter())
 	rec := httptest.NewRecorder()
 	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
 		map[string]string{"username": "alice@example.com", "password": "password123"}))
@@ -213,6 +220,42 @@ func TestLogin_NotRegistered(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "not_registered") {
 		t.Fatalf("body = %q", rec.Body.String())
+	}
+}
+
+func TestLogin_RateLimited(t *testing.T) {
+	authTempHome(t)
+	enc, _ := auth.Hash("password123")
+	_ = auth.Save(auth.User{Username: "alice@example.com", Password: enc})
+	store := auth.NewStore()
+
+	// Injected clock stays fixed so all 6 attempts fall in the window.
+	clock := func() time.Time { return time.Unix(1_700_000_000, 0) }
+	lim := auth.NewLimiterWithClock(5, 60*time.Second, clock)
+	h := api.AuthLogin(store, lim)
+
+	// 5 bad attempts — all should reach the handler and return 401.
+	for i := 0; i < 5; i++ {
+		rec := httptest.NewRecorder()
+		h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
+			map[string]string{"username": "alice@example.com", "password": "wrong"}))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d, want 401 (%s)", i+1, rec.Code, rec.Body.String())
+		}
+	}
+
+	// 6th attempt must be rate-limited.
+	rec := httptest.NewRecorder()
+	h(rec, authJSONReq(t, http.MethodPost, "/api/auth/login",
+		map[string]string{"username": "alice@example.com", "password": "wrong"}))
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("6th attempt status = %d, want 429", rec.Code)
+	}
+	if ra := rec.Result().Header.Get("Retry-After"); ra == "" {
+		t.Fatal("Retry-After header missing on 429")
+	}
+	if !strings.Contains(rec.Body.String(), "rate_limited") {
+		t.Fatalf("body = %q, want rate_limited code", rec.Body.String())
 	}
 }
 

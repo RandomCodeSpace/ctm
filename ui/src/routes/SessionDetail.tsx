@@ -1,13 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ArrowLeft } from "lucide-react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useLocation, useNavigate, useParams } from "react-router";
+import { Tabs, Skeleton, PageHeader } from "@ossrandom/design-system";
 import { FeedStream } from "@/components/FeedStream";
 import { CheckpointRow } from "@/components/CheckpointRow";
 import { RevertSheet } from "@/components/RevertSheet";
@@ -84,50 +77,40 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
         !embedded && "min-h-screen",
       )}
     >
-      <header
-        className={cn(
-          "flex shrink-0 items-baseline gap-3 border-b border-border px-4 py-3",
-          embedded ? "" : "px-6",
-        )}
-      >
-        <Link
-          to="/"
-          aria-label="Back to dashboard"
-          className={cn(
-            "self-center text-fg-dim hover:text-fg",
-            // Always visible when not embedded; mobile-only when embedded
-            // (desktop two-pane keeps the list visible so back is moot).
-            embedded ? "md:hidden" : "",
-          )}
-        >
-          <ArrowLeft size={16} aria-hidden />
-        </Link>
-        {session && (
-          <HealthDot
-            state={healthState({
-              tmux_alive: session.tmux_alive,
-              last_tool_call_at: session.last_tool_call_at,
-            })}
-            className="self-center"
-          />
-        )}
-        <h2 className="truncate font-serif text-lg font-semibold text-fg">
-          {name}
-        </h2>
-        {session && (
-          <span
-            className={cn(
-              "shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em]",
-              session.mode === "yolo" ? "text-mode-yolo" : "text-mode-safe",
-            )}
-          >
-            {session.mode}
-          </span>
-        )}
-        {attn && attn.state !== "clear" && (
-          <AttentionLabel attention={attn} className="ml-2 hidden md:flex" />
-        )}
-      </header>
+      <PageHeader
+        size={embedded ? "xs" : "md"}
+        className="shrink-0"
+        backInline
+        back={{ onClick: () => navigate("/"), label: "Back to dashboard" }}
+        avatar={
+          session ? (
+            <HealthDot
+              state={healthState({
+                tmux_alive: session.tmux_alive,
+                last_tool_call_at: session.last_tool_call_at,
+              })}
+            />
+          ) : undefined
+        }
+        title={name}
+        badge={
+          session ? (
+            <span
+              className={cn(
+                "shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em]",
+                session.mode === "yolo" ? "text-mode-yolo" : "text-mode-safe",
+              )}
+            >
+              {session.mode}
+            </span>
+          ) : undefined
+        }
+        actions={
+          attn && attn.state !== "clear" ? (
+            <AttentionLabel attention={attn} className="hidden md:flex" />
+          ) : undefined
+        }
+      />
 
       {session && (
         <div className="shrink-0">
@@ -135,86 +118,63 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
         </div>
       )}
 
-      <Tabs
+      <Tabs<TabKey>
+        variant="line"
+        size="md"
+        scrollable
         value={tab}
-        onValueChange={(v) => changeTab(v as TabKey)}
-        className="flex min-h-0 flex-1 flex-col gap-0"
-      >
-        {/* Relative wrapper so the right-edge fade can sit above the
-            scrollable row without consuming pointer events. The fade
-            is purely a visual hint that more tabs exist off-screen at
-            narrow widths; on wide viewports the row fits and the fade
-            sits harmlessly over empty space on the right. */}
-        <div className="relative shrink-0 border-b border-border">
-          <TabsList
-            className={cn(
-              "h-auto w-full flex-nowrap justify-start rounded-none border-none bg-bg px-4 py-0",
-              "overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none]",
-              "[&::-webkit-scrollbar]:hidden",
-            )}
-          >
-            <TabTrigger value="pane">Pane</TabTrigger>
-            <TabTrigger value="feed">Feed</TabTrigger>
-            <TabTrigger value="checkpoints">Checkpoints</TabTrigger>
-            <TabTrigger value="subagents">Subagents</TabTrigger>
-            <TabTrigger value="teams">Teams</TabTrigger>
-            <TabTrigger value="meta">Meta</TabTrigger>
-          </TabsList>
-          <div
-            aria-hidden
-            className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-bg to-transparent"
-          />
-        </div>
-
-        <TabsContent value="feed" className="m-0 flex min-h-0 flex-1 flex-col">
-          <FeedTab sessionName={name} />
-        </TabsContent>
-
-        <TabsContent
-          value="checkpoints"
-          className="m-0 flex min-h-0 flex-1 flex-col"
-        >
-          <CheckpointsTab sessionName={name} />
-        </TabsContent>
-
-        <TabsContent
-          value="subagents"
-          className="m-0 flex min-h-0 flex-1 flex-col"
-        >
-          <SubagentTree sessionName={name} />
-        </TabsContent>
-
-        <TabsContent
-          value="teams"
-          className="m-0 flex min-h-0 flex-1 flex-col"
-        >
-          <AgentTeamsPanel sessionName={name} />
-        </TabsContent>
-
-        <TabsContent
-          value="pane"
-          className="m-0 flex min-h-0 flex-1 flex-col"
-        >
-          <PaneView sessionName={name} />
-        </TabsContent>
-
-        <TabsContent value="meta" className="m-0 flex-1 overflow-y-auto">
-          {isLoading && (
-            <div className="space-y-3 p-6">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-4 w-3/4" />
-            </div>
-          )}
-          {session && (
-            <>
-              <MetaList session={session} />
-              <LogDiskUsage />
-              <CostChart sessionName={name} />
-            </>
-          )}
-        </TabsContent>
-      </Tabs>
+        onChange={(k) => changeTab(k)}
+        className="ctm-session-tabs flex min-h-0 flex-1 flex-col"
+        items={[
+            {
+              key: "pane",
+              label: "Pane",
+              content: <PaneView sessionName={name} />,
+            },
+            {
+              key: "feed",
+              label: "Feed",
+              content: <FeedTab sessionName={name} />,
+            },
+            {
+              key: "checkpoints",
+              label: "Checkpoints",
+              content: <CheckpointsTab sessionName={name} />,
+            },
+            {
+              key: "subagents",
+              label: "Subagents",
+              content: <SubagentTree sessionName={name} />,
+            },
+            {
+              key: "teams",
+              label: "Teams",
+              content: <AgentTeamsPanel sessionName={name} />,
+            },
+            {
+              key: "meta",
+              label: "Meta",
+              content: (
+                <div className="flex-1 overflow-y-auto">
+                  {isLoading && (
+                    <div className="space-y-3 p-6">
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-4 w-1/2" />
+                      <Skeleton className="h-4 w-3/4" />
+                    </div>
+                  )}
+                  {session && (
+                    <>
+                      <MetaList session={session} />
+                      <LogDiskUsage />
+                      <CostChart sessionName={name} />
+                    </>
+                  )}
+                </div>
+              ),
+          },
+        ]}
+      />
       {session && (
         <SessionInputBar
           sessionName={session.name}
@@ -222,31 +182,6 @@ export function SessionDetail({ embedded }: SessionDetailProps) {
         />
       )}
     </section>
-  );
-}
-
-function TabTrigger({
-  value,
-  children,
-}: {
-  value: string;
-  children: ReactNode;
-}) {
-  return (
-    <TabsTrigger
-      value={value}
-      className={cn(
-        // shrink-0 so the tab keeps its intrinsic width when the
-        // parent row is overflow-x-auto (otherwise flex would squeeze
-        // the trailing tabs into nothing instead of scrolling).
-        "shrink-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-2",
-        "text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted",
-        "data-[state=active]:border-accent-gold data-[state=active]:bg-transparent",
-        "data-[state=active]:text-fg data-[state=active]:shadow-none",
-      )}
-    >
-      {children}
-    </TabsTrigger>
   );
 }
 

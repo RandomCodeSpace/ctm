@@ -135,12 +135,42 @@ func (c *Client) PanePID(name string) (string, error) {
 // named session. `-e` preserves escape sequences (colour) so the
 // consumer can render ANSI; `-p` prints to stdout instead of a buffer.
 // Follows the same CLI-shell-out style as PaneCommand / PanePID.
+//
+// Visible-only: callers that need pane readiness (see pane_ready.go)
+// must compare the current screen, not scrollback. For the live pane
+// viewer, use CapturePaneHistory with a non-zero scrollback.
 func (c *Client) CapturePane(name string) (string, error) {
 	args := []string{}
 	if c.confPath != "" {
 		args = append(args, "-f", c.confPath)
 	}
 	args = append(args, "capture-pane", "-e", "-p", "-t", name)
+	out, err := exec.Command("tmux", args...).Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// CapturePaneHistory returns the contents of the pane in the named
+// session including up to `scrollback` lines of tmux history above
+// the currently visible screen. `-e` preserves SGR escapes, `-p`
+// prints to stdout, `-J` joins wrapped lines so the consumer sees
+// logical lines instead of terminal-width fragments.
+//
+// scrollback <= 0 degrades to the visible-only behaviour of
+// CapturePane. Callers that want the entire scrollback can pass a
+// large bound (the tmux history-limit is ~2000 by default and can
+// be raised per session).
+func (c *Client) CapturePaneHistory(name string, scrollback int) (string, error) {
+	args := []string{}
+	if c.confPath != "" {
+		args = append(args, "-f", c.confPath)
+	}
+	args = append(args, "capture-pane", "-e", "-p", "-J", "-t", name)
+	if scrollback > 0 {
+		args = append(args, "-S", fmt.Sprintf("-%d", scrollback))
+	}
 	out, err := exec.Command("tmux", args...).Output()
 	if err != nil {
 		return "", err

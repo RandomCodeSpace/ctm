@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "@ossrandom/design-system";
 import { ApiError } from "@/lib/api";
 import { useLogin } from "@/hooks/useLogin";
 
@@ -35,7 +36,7 @@ export function LoginForm({ onSwitchToSignup }: Props) {
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-border bg-surface p-6">
-      <h1 className="mb-4 font-serif text-xl font-bold">Log in to ctm</h1>
+      <h1 className="mb-4 text-lg font-bold sm:text-xl">Log in to ctm</h1>
       <form onSubmit={onSubmit} className="space-y-3">
         <Field label="Email" type="email" value={username} onChange={setUsername} autoComplete="email" />
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
@@ -53,13 +54,17 @@ export function LoginForm({ onSwitchToSignup }: Props) {
             )}
           </div>
         )}
-        <button
+        <Button
           type="submit"
+          variant="danger"
+          size="sm"
+          block
           disabled={!canSubmit}
-          className="w-full rounded border border-border bg-accent-gold px-3 py-2 text-xs font-semibold text-bg hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          loading={login.isPending}
+          className="!text-[11px] !h-8 sm:!text-[13px] sm:!h-9"
         >
           Log in
-        </button>
+        </Button>
         <p className="pt-2 text-[11px] text-fg-dim">
           Forgot password? Run <code className="rounded bg-surface-2 px-1 py-0.5 font-mono">ctm auth reset</code> on the host, then sign up again.
         </p>
@@ -91,7 +96,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
-        className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-[16px] text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
+        className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-sm text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
       />
     </label>
   );

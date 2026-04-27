@@ -94,7 +94,7 @@ export function SessionInputBar({ sessionName, mode }: SessionInputBarProps) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Type a reply…"
-            className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 font-mono text-[16px] text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
+            className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 font-mono text-base text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
           />
           <button
             type="submit"

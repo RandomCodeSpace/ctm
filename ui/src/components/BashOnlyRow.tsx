@@ -44,7 +44,7 @@ export function BashOnlyRow({ row }: BashOnlyRowProps) {
   return (
     <article
       className={cn(
-        "ctm-row-in border-l-[3px] border-b border-b-border px-4 py-2",
+        "border-l-[3px] border-b border-b-border px-4 py-2",
         isError ? "border-l-alert-ember bg-alert-ember/5" : "border-l-transparent",
       )}
       data-testid="bash-row"
