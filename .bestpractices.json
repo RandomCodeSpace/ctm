@@ -1,11 +1,38 @@
 {
-  "_comment": "OpenSSF Best Practices answers for the 'passing' tier. The bestpractices.dev BadgeApp reads this file from the repo root (per docs/bestpractices-json.md upstream) when the project is registered there, and uses each <criterion>_status / <criterion>_justification pair as the proposed answer. To trigger re-ingestion after edits, the maintainer opens the project's edit page on bestpractices.dev and clicks 'Save (and continue) 🤖'. Status '?' means 'unknown' and is ignored — safe placeholder. .github/workflows/bestpractices.yml lints this file on every push to main so it stays parseable and on-schema. Per the upstream criteria, only the eight criteria with met_url_required=true (contribution, contribution_requirements, license_location, release_notes, report_process, report_archive, vulnerability_report_process, vulnerability_report_private) carry a bare URL in their justification; every other justification is prose only.",
+  "$schema": "https://bestpractices.coreinfrastructure.org/projects.schema.json",
+  "_comment": "OpenSSF Best Practices answers for the 'passing' tier. The bestpractices.dev BadgeApp reads this file from the repo root (per docs/bestpractices-json.md upstream) when the project is registered there, and uses each <criterion>_status / <criterion>_justification pair as the proposed answer. To trigger re-ingestion after edits, the maintainer opens the project's edit page on bestpractices.dev and clicks 'Save (and continue) 🤖'. Status '?' means 'unknown' and is ignored — safe placeholder. .github/workflows/bestpractices.yml lints this file on every push to main so it stays parseable and on-schema.",
 
+  "project_id": 12716,
   "name": "ctm",
   "description": "Claude Tmux Manager — survive SSH drops, reattach from your phone.",
   "homepage_url": "https://github.com/RandomCodeSpace/ctm",
   "repo_url": "https://github.com/RandomCodeSpace/ctm",
   "license": "MIT",
+  "level": "passing",
+  "badge_url": "https://www.bestpractices.dev/projects/12716/badge",
+  "project_page_url": "https://www.bestpractices.dev/en/projects/12716",
+
+  "evidence": {
+    "license_file": "LICENSE",
+    "contributing_guide": "CONTRIBUTING.md",
+    "vulnerability_report_process": "SECURITY.md",
+    "release_notes": "CHANGELOG.md",
+    "build_reproducible": "Makefile + go build -tags sqlite_fts5 ./...",
+    "ci_workflow": ".github/workflows/ci.yml",
+    "release_workflow": ".github/workflows/release.yml",
+    "code_scanning": ".github/workflows/codeql.yml",
+    "supply_chain_scorecard": ".github/workflows/scorecard.yml",
+    "static_analysis_sonar": "sonar-project.properties + SonarCloud quality gate",
+    "bestpractices_lint": ".github/workflows/bestpractices.yml",
+    "private_vulnerability_reporting": "GitHub repo setting (security advisories enabled)",
+    "secret_scanning": "GitHub repo setting (secret_scanning + push_protection enabled)"
+  },
+
+  "audit": {
+    "self_assessment_date": "2026-05-01",
+    "scorecard_dashboard": "https://scorecard.dev/viewer/?uri=github.com/RandomCodeSpace/ctm",
+    "sonarcloud_dashboard": "https://sonarcloud.io/summary/overall?id=RandomCodeSpace_ctm"
+  },
 
   "description_good_status": "Met",
   "description_good_justification": "README opens with: 'Claude Tmux Manager — survive SSH drops, reattach from your phone.'",
@@ -17,7 +44,7 @@
   "contribution_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md",
 
   "contribution_requirements_status": "Met",
-  "contribution_requirements_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md#coding-standards",
+  "contribution_requirements_justification": "CONTRIBUTING.md documents PR requirements: branch naming, scoped PRs, tests required for new logic, conventional-commit subjects, all checks passing (go vet, go test -race, pnpm tsc --noEmit, pnpm vitest, SonarCloud, CodeQL, OpenSSF Scorecard). https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md#coding-standards",
 
   "floss_license_status": "Met",
   "floss_license_justification": "MIT License.",
@@ -27,9 +54,6 @@
 
   "license_location_status": "Met",
   "license_location_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE",
-
-  "documentation_basics_status": "Met",
-  "documentation_basics_justification": "README documents installation, configuration, and primary commands.",
 
   "documentation_interface_status": "Met",
   "documentation_interface_justification": "README has a Commands section listing every external interface (yolo, safe, attach, kill, list, ctm serve, etc.).",
@@ -68,7 +92,7 @@
   "version_tags_justification": "Releases are git-tagged.",
 
   "release_notes_status": "Met",
-  "release_notes_justification": "https://github.com/RandomCodeSpace/ctm/releases",
+  "release_notes_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/CHANGELOG.md",
 
   "release_notes_vulns_status": "N/A",
   "release_notes_vulns_justification": "No publicly disclosed vulnerabilities to date.",
