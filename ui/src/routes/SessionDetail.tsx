@@ -190,9 +190,9 @@ type FeedFilter = "all" | "bash";
 const FEED_FILTER_STORAGE_PREFIX = "ctm.feed.filter.";
 
 function readStoredFilter(sessionName: string): FeedFilter {
-  if (typeof window === "undefined") return "all";
+  if (typeof globalThis.window === "undefined") return "all";
   try {
-    const v = window.sessionStorage.getItem(
+    const v = globalThis.sessionStorage.getItem(
       FEED_FILTER_STORAGE_PREFIX + sessionName,
     );
     return v === "bash" ? "bash" : "all";
@@ -219,9 +219,9 @@ function FeedTab({ sessionName }: { sessionName: string }) {
   }, [sessionName]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof globalThis.window === "undefined") return;
     try {
-      window.sessionStorage.setItem(
+      globalThis.sessionStorage.setItem(
         FEED_FILTER_STORAGE_PREFIX + sessionName,
         filter,
       );
@@ -329,7 +329,7 @@ function CheckpointsTab({ sessionName }: { sessionName: string }) {
             No checkpoints. Run ctm yolo to create the first.
           </p>
         )}
-        <ul role="list">
+        <ul>
           {checkpoints.map((cp) => (
             <li key={cp.sha}>
               <CheckpointRow

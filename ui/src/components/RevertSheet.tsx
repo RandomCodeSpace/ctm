@@ -216,10 +216,7 @@ function PhaseBody({ phase }: { phase: Phase }) {
           <p className="mt-1 text-sm text-fg-muted">
             {phase.dirty.length} file{phase.dirty.length === 1 ? "" : "s"} have uncommitted changes:
           </p>
-          <ul
-            role="list"
-            className="mt-2 max-h-40 overflow-y-auto font-mono text-xs text-fg"
-          >
+          <ul className="mt-2 max-h-40 overflow-y-auto font-mono text-xs text-fg">
             {phase.dirty.map((f) => (
               <li key={f} className="truncate" title={f}>
                 {f}

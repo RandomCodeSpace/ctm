@@ -42,6 +42,9 @@ const (
 
 	probeTimeout  = 200 * time.Millisecond
 	shutdownGrace = 10 * time.Second
+
+	// jsonlExt is the per-session claude history file suffix.
+	jsonlExt = ".jsonl"
 )
 
 // ErrAlreadyRunning is returned by New when another `ctm serve` already
@@ -118,14 +121,14 @@ type Server struct {
 	// without a signal.
 	runCancel context.CancelFunc
 
-	sessions   *auth.Store
-	hub        *events.Hub
-	proj       *ingest.Projection
-	tailers    *ingest.TailerManager
-	quota      *ingest.QuotaIngester
-	cpCache    *api.CheckpointsCache
-	attention  *attention.Engine
-	webhook    *webhook.Dispatcher
+	sessions     *auth.Store
+	hub          *events.Hub
+	proj         *ingest.Projection
+	tailers      *ingest.TailerManager
+	quota        *ingest.QuotaIngester
+	cpCache      *api.CheckpointsCache
+	attention    *attention.Engine
+	webhook      *webhook.Dispatcher
 	tmuxClient   *tmux.Client
 	sessionStore *session.Store
 	cost         store.CostStore
@@ -248,12 +251,12 @@ func New(opts Options) (*Server, error) {
 		tailers:       ingest.NewTailerManager(logDir, hub),
 		quota:         quota,
 		cpCache:       cpCache,
-		attention:    attEngine,
-		webhook:      disp,
-		tmuxClient:   tmuxClient,
-		sessionStore: sessionStore,
-		cost:         costDB,
-		logDir:       logDir,
+		attention:     attEngine,
+		webhook:       disp,
+		tmuxClient:    tmuxClient,
+		sessionStore:  sessionStore,
+		cost:          costDB,
+		logDir:        logDir,
 	}
 
 	mux := http.NewServeMux()
@@ -366,10 +369,10 @@ func (s *Server) Run(ctx context.Context) error {
 	adoptedViaWorkdir := 0
 	if entries, err := os.ReadDir(s.logDir); err == nil {
 		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), jsonlExt) {
 				continue
 			}
-			uuid := strings.TrimSuffix(e.Name(), ".jsonl")
+			uuid := strings.TrimSuffix(e.Name(), jsonlExt)
 			name, viaFallback, ok := resolveLogUUIDToName(uuid, uuidToName, claudeDirToName, claudeProjectsRoot)
 			if !ok {
 				orphanUUIDs = append(orphanUUIDs, uuid)
@@ -506,10 +509,10 @@ func (s *Server) rescanTailers(ctx context.Context, claudeProjectsRoot string) {
 		return
 	}
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), jsonlExt) {
 			continue
 		}
-		uuid := strings.TrimSuffix(e.Name(), ".jsonl")
+		uuid := strings.TrimSuffix(e.Name(), jsonlExt)
 		name, _, ok := resolveLogUUIDToName(uuid, uuidToName, claudeDirToName, claudeProjectsRoot)
 		if !ok {
 			continue
@@ -570,7 +573,7 @@ func resolveLogUUIDToName(uuid string, uuidToName, claudeDirToName map[string]st
 	if claudeProjectsRoot == "" {
 		return "", false, false
 	}
-	matches, _ := filepath.Glob(filepath.Join(claudeProjectsRoot, "*", uuid+".jsonl"))
+	matches, _ := filepath.Glob(filepath.Join(claudeProjectsRoot, "*", uuid+jsonlExt))
 	if len(matches) != 1 {
 		return "", false, false
 	}
@@ -1062,7 +1065,7 @@ func (r logsUUIDResolver) ResolveUUID(uuid string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	matches, _ := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", uuid+".jsonl"))
+	matches, _ := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", uuid+jsonlExt))
 	if len(matches) != 1 {
 		return "", false
 	}

@@ -42,9 +42,9 @@ function Cell({ label, value }: { label: string; value?: number }) {
           "font-mono text-sm tabular-nums",
           known ? "text-fg" : "text-fg-dim",
         )}
-        title={known ? value!.toLocaleString() : undefined}
+        title={known ? value.toLocaleString() : undefined}
       >
-        {known ? compactNumber(value!) : "—"}
+        {known ? compactNumber(value) : "—"}
       </span>
     </div>
   );

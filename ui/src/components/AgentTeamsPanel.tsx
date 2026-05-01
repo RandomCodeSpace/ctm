@@ -48,7 +48,7 @@ export function AgentTeamsPanel({ sessionName }: { sessionName: string }) {
         </p>
       )}
 
-      <ul role="list" className="space-y-3">
+      <ul className="space-y-3">
         {teams.map((team) => (
           <li key={team.id}>
             <TeamCard team={team} />
@@ -108,7 +108,7 @@ function TeamCard({ team }: { team: Team }) {
               {team.summary}
             </blockquote>
           )}
-          <ul role="list" className="space-y-1">
+          <ul className="space-y-1">
             {team.members.map((m) => (
               <TeamMemberRow key={m.subagent_id} member={m} />
             ))}

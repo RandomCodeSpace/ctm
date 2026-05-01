@@ -232,17 +232,17 @@ export function SseProvider({ children }: { children: ReactNode }) {
   // reconnect cycle (or on tab focus changes) don't flap the banner.
   // The "connected" transition is immediate — recovery should feel
   // instant.
-  const lostTimerRef = useRef<number | null>(null);
+  const lostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markConnected = useCallback(() => {
     if (lostTimerRef.current !== null) {
-      window.clearTimeout(lostTimerRef.current);
+      globalThis.clearTimeout(lostTimerRef.current);
       lostTimerRef.current = null;
     }
     setConnected(true);
   }, []);
   const markDisconnected = useCallback(() => {
     if (lostTimerRef.current !== null) return;
-    lostTimerRef.current = window.setTimeout(() => {
+    lostTimerRef.current = globalThis.setTimeout(() => {
       lostTimerRef.current = null;
       setConnected(false);
     }, disconnectGrace);
@@ -250,7 +250,7 @@ export function SseProvider({ children }: { children: ReactNode }) {
   useEffect(
     () => () => {
       if (lostTimerRef.current !== null) {
-        window.clearTimeout(lostTimerRef.current);
+        globalThis.clearTimeout(lostTimerRef.current);
         lostTimerRef.current = null;
       }
     },

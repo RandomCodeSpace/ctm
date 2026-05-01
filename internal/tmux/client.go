@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+// tmuxDisplayMessage is the tmux subcommand used by every helper that
+// reads a client- or session-scoped variable via `-p <fmt>`.
+const tmuxDisplayMessage = "display-message"
+
 // IsInsideTmux returns true if the current process is running inside a tmux session.
 func IsInsideTmux() bool {
 	return os.Getenv("TMUX") != ""
@@ -188,7 +192,7 @@ func (c *Client) RespawnPane(name, shellCmd string) error {
 
 // CurrentSession returns the name of the current tmux session.
 func (c *Client) CurrentSession() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#S").Output()
+	out, err := exec.Command("tmux", tmuxDisplayMessage, "-p", "#S").Output()
 	if err != nil {
 		return "", err
 	}
@@ -197,7 +201,7 @@ func (c *Client) CurrentSession() (string, error) {
 
 // PaneCurrentPath returns the current working directory of the pane in the named session.
 func (c *Client) PaneCurrentPath(name string) (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-t", name, "-p", "#{pane_current_path}").Output()
+	out, err := exec.Command("tmux", tmuxDisplayMessage, "-t", name, "-p", "#{pane_current_path}").Output()
 	if err != nil {
 		return "", err
 	}
@@ -294,7 +298,7 @@ func buildRespawnPaneArgs(name, shellCmd string) []string {
 
 // clientTTY returns the tty of the current tmux client.
 func clientTTY() string {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{client_tty}").Output()
+	out, err := exec.Command("tmux", tmuxDisplayMessage, "-p", "#{client_tty}").Output()
 	if err != nil {
 		return ""
 	}

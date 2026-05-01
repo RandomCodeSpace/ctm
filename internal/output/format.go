@@ -17,6 +17,11 @@ const (
 	colorDim     = "\033[2m"
 	colorBold    = "\033[1m"
 	colorReset   = "\033[0m"
+
+	// colorWrapFmt sandwiches a message between an ANSI colour open
+	// (%s), the message body (%s), and colorReset (%s) followed by a
+	// newline. Used by Success / Warn / Magenta / Cyan / Bold / Dim.
+	colorWrapFmt = "%s%s%s\n"
 )
 
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -43,7 +48,7 @@ func Stderr() *Printer {
 
 func (p *Printer) Success(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(p.w, "%s%s%s\n", colorGreen, msg, colorReset)
+	fmt.Fprintf(p.w, colorWrapFmt, colorGreen, msg, colorReset)
 }
 
 func (p *Printer) Error(what, reason, fix string) {
@@ -56,27 +61,27 @@ func (p *Printer) Error(what, reason, fix string) {
 
 func (p *Printer) Warn(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(p.w, "%s%s%s\n", colorYellow, msg, colorReset)
+	fmt.Fprintf(p.w, colorWrapFmt, colorYellow, msg, colorReset)
 }
 
 func (p *Printer) Info(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(p.w, "%s%s%s\n", colorCyan, msg, colorReset)
+	fmt.Fprintf(p.w, colorWrapFmt, colorCyan, msg, colorReset)
 }
 
 func (p *Printer) Bold(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(p.w, "%s%s%s\n", colorBold, msg, colorReset)
+	fmt.Fprintf(p.w, colorWrapFmt, colorBold, msg, colorReset)
 }
 
 func (p *Printer) Dim(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(p.w, "%s%s%s\n", colorDim, msg, colorReset)
+	fmt.Fprintf(p.w, colorWrapFmt, colorDim, msg, colorReset)
 }
 
 func (p *Printer) Magenta(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(p.w, "%s%s%s\n", colorMagenta, msg, colorReset)
+	fmt.Fprintf(p.w, colorWrapFmt, colorMagenta, msg, colorReset)
 }
 
 // Debug prints only when verbose is true. Caller passes the flag.

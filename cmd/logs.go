@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/logrotate"
 	"github.com/RandomCodeSpace/ctm/internal/output"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -37,14 +37,17 @@ var (
 	logsGrep   string
 )
 
+// jsonlExt is the per-session log file suffix written by log_tool_use.
+const jsonlExt = ".jsonl"
+
 // filterSpec is the compiled form of the logs-command filter flags.
 // Zero-valued fields disable the corresponding check, so an empty
 // filterSpec passes everything.
 type filterSpec struct {
-	since    time.Time      // zero = no time filter
-	toolLow  string         // "" = no tool filter (lowercased)
-	grep     *regexp.Regexp // nil = no grep filter
-	active   bool           // true if any filter is set (cheap short-circuit)
+	since   time.Time      // zero = no time filter
+	toolLow string         // "" = no tool filter (lowercased)
+	grep    *regexp.Regexp // nil = no grep filter
+	active  bool           // true if any filter is set (cheap short-circuit)
 }
 
 // compileFilters builds a filterSpec from the current flag values.
@@ -152,7 +155,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 
 	// With arg → show that session's log (tailing if requested).
 	sessionID := sanitizeSessionID(args[0])
-	logFile := filepath.Join(logDir, sessionID+".jsonl")
+	logFile := filepath.Join(logDir, sessionID+jsonlExt)
 	if _, err := os.Stat(logFile); err != nil {
 		return fmt.Errorf("no log file for session %q at %s", sessionID, logFile)
 	}
@@ -184,14 +187,14 @@ func listSessionLogs(logDir string) error {
 	}
 	var rows []row
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), jsonlExt) {
 			continue
 		}
 		info, err := e.Info()
 		if err != nil {
 			continue
 		}
-		name := strings.TrimSuffix(e.Name(), ".jsonl")
+		name := strings.TrimSuffix(e.Name(), jsonlExt)
 		rows = append(rows, row{
 			name:  name,
 			size:  info.Size(),
@@ -403,7 +406,8 @@ func tailLog(cmd *cobra.Command, path string, fs filterSpec) error {
 }
 
 // printFormattedEntry renders a single JSONL entry as a short line:
-//   2026-04-12T10:23:45Z  Read         /path/to/file
+//
+//	2026-04-12T10:23:45Z  Read         /path/to/file
 func printFormattedEntry(raw []byte) {
 	var entry map[string]interface{}
 	if err := json.Unmarshal(raw, &entry); err != nil {

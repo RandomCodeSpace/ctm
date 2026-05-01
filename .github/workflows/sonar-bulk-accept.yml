@@ -1,0 +1,288 @@
+name: SonarCloud Bulk Accept
+
+# Marks remaining open code smells in well-defined buckets as
+# Accepted (formerly "Won't Fix") with a deliberate comment, so the
+# Sonar issue list reflects only smells we actually want to act on.
+#
+# Trigger manually from the Actions tab — never runs on push/PR. The
+# rule + filter pairs are explicit; adding a new bucket means editing
+# this file (visible in PR review) rather than mass-suppressing in code.
+#
+# Each bucket sends ONE bulk_change call to the SonarCloud API:
+#   POST /api/issues/bulk_change
+#       issues=<comma-separated keys>
+#       do_transition=accept
+#       comment=<bucket-specific justification>
+#
+# Why "Accepted" and not "False Positive": these are real findings
+# under their respective rules — we just don't intend to act on them.
+# False Positive is reserved for cases where the rule has misfired
+# (only godre:S8239 in shutdown handling here qualifies).
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print buckets and counts without calling the API"
+        type: boolean
+        default: true
+
+jobs:
+  bulk-accept:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SONAR_HOST: https://sonarcloud.io
+      SONAR_PROJECT: RandomCodeSpace_ctm
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Verify SONAR_TOKEN
+        run: |
+          if [ -z "${SONAR_TOKEN}" ]; then
+            echo "::error::SONAR_TOKEN secret is not set"
+            exit 1
+          fi
+
+      - name: Install jq
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq
+
+      - name: Process buckets
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # Helper: fetch all open CODE_SMELL issue keys matching a filter
+          # (rule + optional path glob via componentKeys). Paginates.
+          fetch_keys() {
+            local rules="$1"
+            local file_filter="${2:-}"
+            local page=1
+            local keys=()
+            while :; do
+              local url="${SONAR_HOST}/api/issues/search?componentKeys=${SONAR_PROJECT}&types=CODE_SMELL&statuses=OPEN,CONFIRMED,REOPENED&rules=${rules}&ps=500&p=${page}"
+              if [ -n "${file_filter}" ]; then
+                url="${url}&files=${file_filter}"
+              fi
+              local resp
+              resp=$(curl -sSf -u "${SONAR_TOKEN}:" "${url}")
+              local batch
+              batch=$(echo "${resp}" | jq -r '.issues[].key')
+              if [ -z "${batch}" ]; then break; fi
+              while IFS= read -r k; do keys+=("$k"); done <<< "${batch}"
+              local total
+              total=$(echo "${resp}" | jq -r '.total')
+              local fetched=$(( page * 500 ))
+              if [ "${fetched}" -ge "${total}" ]; then break; fi
+              page=$(( page + 1 ))
+            done
+            (IFS=,; echo "${keys[*]}")
+          }
+
+          # Helper: bulk-accept a set of keys with a comment.
+          bulk_accept() {
+            local label="$1"
+            local keys="$2"
+            local comment="$3"
+            if [ -z "${keys}" ]; then
+              echo "[${label}] no matching issues — skipping"
+              return
+            fi
+            local count
+            count=$(echo "${keys}" | tr ',' '\n' | wc -l)
+            echo "[${label}] ${count} issues"
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "[${label}] DRY_RUN — not calling bulk_change"
+              return
+            fi
+            # SonarCloud bulk_change accepts at most ~500 keys per call.
+            # Split into chunks of 400 to stay safe.
+            local chunk
+            local rest="${keys}"
+            while [ -n "${rest}" ]; do
+              chunk=$(echo "${rest}" | cut -d',' -f1-400)
+              rest=$(echo "${rest}" | cut -d',' -f401- || true)
+              if [ "${rest}" = "${chunk}" ]; then rest=""; fi
+              curl -sSf -u "${SONAR_TOKEN}:" -X POST \
+                --data-urlencode "issues=${chunk}" \
+                --data-urlencode "do_transition=accept" \
+                --data-urlencode "comment=${comment}" \
+                "${SONAR_HOST}/api/issues/bulk_change" > /dev/null
+            done
+            echo "[${label}] accepted"
+          }
+
+          # ─────────────────────────────────────────────────────────────
+          # Bucket 1: typescript:S6759 — "Mark props as read-only"
+          # The codebase deliberately does not adopt Readonly<Props>; this
+          # is a project-wide style choice, not a per-component miss.
+          KEYS=$(fetch_keys "typescript:S6759")
+          bulk_accept "S6759 readonly-props" "${KEYS}" \
+            "Project style: props interfaces are not wrapped in Readonly<>. Deliberate — accepted."
+
+          # Bucket 2: typescript:S6819 — "Use <output> instead of role=status"
+          # The role=status pattern is acceptable and used consistently
+          # for transient status text; <output> is not adopted project-wide.
+          KEYS=$(fetch_keys "typescript:S6819")
+          bulk_accept "S6819 role-status" "${KEYS}" \
+            "role=status is the established pattern for transient status text; <output> not adopted. Accepted."
+
+          # Bucket 3: typescript:S3358 — nested ternaries
+          # All remaining occurrences are inline JSX render expressions
+          # where extracting helpers would harm readability.
+          KEYS=$(fetch_keys "typescript:S3358")
+          bulk_accept "S3358 nested-ternary" "${KEYS}" \
+            "Inline JSX render — extracting a helper hurts readability more than the nesting. Accepted."
+
+          # Bucket 4: typescript:S6571 — redundant union members
+          # Most are deliberate "string | undefined" / "T | null" shapes
+          # used as explicit escape hatches at API boundaries.
+          KEYS=$(fetch_keys "typescript:S6571")
+          bulk_accept "S6571 redundant-type" "${KEYS}" \
+            "Union members are intentional escape hatches at API boundaries. Accepted."
+
+          # Bucket 5: typescript:S6754 — useState destructuring style
+          # The chosen form (no destructuring of the setter) is intentional
+          # in a couple of one-shot setters; not worth churn.
+          KEYS=$(fetch_keys "typescript:S6754")
+          bulk_accept "S6754 useState-style" "${KEYS}" \
+            "Chosen form is intentional for these one-shot setters. Accepted."
+
+          # Bucket 6: typescript:S6479 — array-index keys
+          # Used only where the list is statically ordered (timestamps in
+          # row keys, doctor checks). React reconciliation is unaffected.
+          KEYS=$(fetch_keys "typescript:S6479")
+          bulk_accept "S6479 array-index-key" "${KEYS}" \
+            "Lists are append-only with stable per-row prefixes; index suffix is fine. Accepted."
+
+          # Bucket 7: typescript:S3735 — `void` operator
+          # We use `void` to discard an awaited Promise result intentionally
+          # (fire-and-forget within useEffect / event handlers).
+          KEYS=$(fetch_keys "typescript:S3735")
+          bulk_accept "S3735 void-operator" "${KEYS}" \
+            "Fire-and-forget Promise in event handler / useEffect; void is the documented escape. Accepted."
+
+          # Bucket 8: typescript:S1874 + javascript:S1874 — use of deprecated APIs
+          # The deprecations flagged are in third-party libs (react-router 6→7
+          # transition residue) where the migration target also fires Sonar.
+          KEYS=$(fetch_keys "typescript:S1874,javascript:S1874")
+          bulk_accept "S1874 deprecation" "${KEYS}" \
+            "Deprecation is in transitional library API; migration tracked separately. Accepted."
+
+          # Bucket 9: typescript:S7763 — re-export shorthand
+          # Existing shape is more grep-able for the codebase's small surface;
+          # the rule's preferred form is fine but not worth churn.
+          KEYS=$(fetch_keys "typescript:S7763")
+          bulk_accept "S7763 export-from" "${KEYS}" \
+            "Existing form is intentional for symbol grep clarity. Accepted."
+
+          # Bucket 10: typescript:S7718 — prefer Set#has over Array#includes
+          # Inputs are O(<10) — Set construction overhead exceeds savings.
+          KEYS=$(fetch_keys "typescript:S7718")
+          bulk_accept "S7718 set-has" "${KEYS}" \
+            "Lookup arrays have <10 elements; Array#includes is faster. Accepted."
+
+          # Bucket 11: typescript:S6772 — "ambiguous spacing"
+          # Remaining occurrences are inside <code>/<span> tag trees where
+          # the chosen form is intentional. Reliability-impact ones already fixed.
+          KEYS=$(fetch_keys "typescript:S6772")
+          bulk_accept "S6772 ambiguous-spacing" "${KEYS}" \
+            "Spacing is intentional inside the affected text/code spans. Accepted."
+
+          # Bucket 12: godre:S8205 — named struct types
+          # Anonymous struct types are intentional in test scaffolding and
+          # request-decode shapes that aren't reused.
+          KEYS=$(fetch_keys "godre:S8205")
+          bulk_accept "S8205 named-struct" "${KEYS}" \
+            "One-shot decode/scratch structs; naming would scatter the type. Accepted."
+
+          # Bucket 13: godre:S8196 — interface naming
+          # Existing names are domain-aligned (InputSessionSource, ProjRefresher).
+          # Renaming would touch a wide blast radius for a stylistic nit.
+          KEYS=$(fetch_keys "godre:S8196")
+          bulk_accept "S8196 interface-name" "${KEYS}" \
+            "Names are domain-aligned and tested; rename has too broad a blast radius. Accepted."
+
+          # Bucket 14: godre:S8193 — receiver naming
+          # Receiver names are short and consistent within each type;
+          # the rule's "first-letter" preference doesn't add value here.
+          KEYS=$(fetch_keys "godre:S8193")
+          bulk_accept "S8193 receiver-name" "${KEYS}" \
+            "Receiver names are consistent within each type. Accepted."
+
+          # Bucket 15: godre:S8242 — context.Context as struct field
+          # Used in a long-lived daemon component where ctx genuinely lives
+          # on the struct (cancellation propagates through the lifecycle).
+          KEYS=$(fetch_keys "godre:S8242")
+          bulk_accept "S8242 ctx-field" "${KEYS}" \
+            "Daemon-scoped ctx travels with the struct's lifecycle. Accepted."
+
+          # Bucket 16: go:S107 + go:S117 — too many params / variable name
+          # Existing shape mirrors HTTP handler / cobra signatures.
+          KEYS=$(fetch_keys "go:S107,go:S117")
+          bulk_accept "S107/S117 signature" "${KEYS}" \
+            "Signature mirrors handler / cobra contracts. Accepted."
+
+          # Bucket 17: typescript:S6582 — optional chain
+          # Already fixed where applicable; remaining are intentional
+          # truthiness checks (e.g. `&& obj.field` where obj is required).
+          KEYS=$(fetch_keys "typescript:S6582")
+          bulk_accept "S6582 optional-chain" "${KEYS}" \
+            "Remaining occurrences are intentional truthiness checks on required fields. Accepted."
+
+          # Bucket 18: typescript:S4624 — nested template literals
+          # Used for compact JSX label composition; collapsing harms clarity.
+          KEYS=$(fetch_keys "typescript:S4624")
+          bulk_accept "S4624 nested-template" "${KEYS}" \
+            "Compact JSX label composition; collapsing harms clarity. Accepted."
+
+          # Bucket 19: typescript:S6822 — implicit list role (remaining only)
+          # Reliability-impact occurrences fixed in code; remaining list
+          # elements are inside scrollable card bodies where the parent
+          # treats them as decorative.
+          KEYS=$(fetch_keys "typescript:S6822")
+          bulk_accept "S6822 implicit-list" "${KEYS}" \
+            "Remaining list elements are decorative within scrollable card bodies. Accepted."
+
+          # Bucket 20: typescript:S1871 — duplicate case body
+          # The duplicate clauses document distinct semantic categories
+          # that happen to dispatch to the same code path.
+          KEYS=$(fetch_keys "typescript:S1871")
+          bulk_accept "S1871 duplicate-case" "${KEYS}" \
+            "Cases document distinct semantic categories sharing one code path. Accepted."
+
+          # ─────────────────────────────────────────────────────────────
+          # Bucket 21: ALL remaining smells in *_test.go / *.test.ts(x)
+          # Test code is intentionally dense (table-driven cases, mock
+          # plumbing, deep ternaries to express expected outputs). The
+          # cognitive-complexity / readonly / etc. rules are noise here.
+          test_keys=$(curl -sSf -u "${SONAR_TOKEN}:" \
+            "${SONAR_HOST}/api/issues/search?componentKeys=${SONAR_PROJECT}&types=CODE_SMELL&statuses=OPEN,CONFIRMED,REOPENED&ps=500" \
+            | jq -r '.issues[] | select(.component | test("(_test\\.go|\\.test\\.tsx?)$")) | .key' \
+            | paste -sd, -)
+          bulk_accept "test-file smells" "${test_keys}" \
+            "Test code: table-driven density / mock plumbing / explicit ternaries are by design. Accepted."
+
+          # ─────────────────────────────────────────────────────────────
+          # FALSE POSITIVE bucket — the rule has misfired here.
+          # Keep this list explicit; do not append-only.
+          fp_keys=$(fetch_keys "godre:S8239")
+          if [ -n "${fp_keys}" ]; then
+            count=$(echo "${fp_keys}" | tr ',' '\n' | wc -l)
+            echo "[S8239 false-positive] ${count} issues"
+            if [ "${DRY_RUN}" != "true" ]; then
+              curl -sSf -u "${SONAR_TOKEN}:" -X POST \
+                --data-urlencode "issues=${fp_keys}" \
+                --data-urlencode "do_transition=falsepositive" \
+                --data-urlencode "comment=Shutdown handler: the parent ctx is already Done at this point (we just received from <-ctx.Done()), so deriving from it would give a zero-grace shutdown. context.Background() is required for the grace deadline." \
+                "${SONAR_HOST}/api/issues/bulk_change" > /dev/null
+              echo "[S8239 false-positive] marked"
+            fi
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "Run with dry_run=false to actually apply the transitions."
+          echo "Re-run after the next Sonar scan to clean up any new findings in the same buckets."

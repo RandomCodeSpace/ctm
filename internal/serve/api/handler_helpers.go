@@ -4,6 +4,14 @@ import (
 	"net/http"
 )
 
+// Mutation handlers share these short error messages — extracted to
+// satisfy the "no duplicated literal" rule and keep the wire shape
+// stable across kill / forget / rename / attach-url responses.
+const (
+	errMsgMissingSessionName = "missing session name"
+	errMsgSessionNotFound    = "session not found"
+)
+
 // requireSessionPreamble runs the boilerplate every /api/sessions/{name}/...
 // JSON GET handler needs: enforce GET/HEAD only, set the standard
 // Content-Type + Cache-Control headers, extract the {name} path param, and
@@ -16,13 +24,13 @@ import (
 func requireSessionPreamble(w http.ResponseWriter, r *http.Request) (name string, ok bool) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set(headerCacheControl, cacheControlNoStore)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return "", false
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(headerContentType, contentTypeJSON)
+	w.Header().Set(headerCacheControl, cacheControlNoStore)
 
 	name = r.PathValue("name")
 	if name == "" {

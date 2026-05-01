@@ -36,6 +36,10 @@ type inputReq struct {
 
 const inputTextMax = 256
 
+// inputLogReject is the slog message used for every reject branch in
+// the Input handler so structured-log consumers can grep one literal.
+const inputLogReject = "input reject"
+
 var (
 	errInputBothFields = errors.New("invalid_body")
 	errInputEmpty      = errors.New("invalid_body")
@@ -50,31 +54,31 @@ func Input(src InputSessionSource, tmux InputTmux) http.HandlerFunc {
 		name := r.PathValue("name")
 		slog.Info("input request", "session", name, "origin", r.Header.Get("Origin"), "ua", r.Header.Get("User-Agent"))
 		if r.Method != http.MethodPost {
-			slog.Info("input reject", "session", name, "reason", "method_not_allowed")
+			slog.Info(inputLogReject, "session", name, "reason", "method_not_allowed")
 			w.Header().Set("Allow", http.MethodPost)
 			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 			return
 		}
 		if name == "" {
-			slog.Info("input reject", "reason", "missing_name")
+			slog.Info(inputLogReject, "reason", "missing_name")
 			writeInputErr(w, http.StatusBadRequest, "invalid_body", "missing session name")
 			return
 		}
 
 		sess, ok := src.Get(name)
 		if !ok {
-			slog.Info("input reject", "session", name, "reason", "session_not_found")
+			slog.Info(inputLogReject, "session", name, "reason", "session_not_found")
 			writeInputErr(w, http.StatusNotFound, "session_not_found", "no session named "+name)
 			return
 		}
 		if sess.Mode != "yolo" {
-			slog.Info("input reject", "session", name, "reason", "not_yolo", "mode", sess.Mode)
+			slog.Info(inputLogReject, "session", name, "reason", "not_yolo", "mode", sess.Mode)
 			writeInputErr(w, http.StatusForbidden, "not_yolo",
 				"input is only available on yolo-mode sessions")
 			return
 		}
 		if !src.TmuxAlive(name) {
-			slog.Info("input reject", "session", name, "reason", "tmux_dead")
+			slog.Info(inputLogReject, "session", name, "reason", "tmux_dead")
 			writeInputErr(w, http.StatusConflict, "tmux_dead",
 				"session tmux has exited")
 			return
@@ -83,14 +87,14 @@ func Input(src InputSessionSource, tmux InputTmux) http.HandlerFunc {
 		var body inputReq
 		r.Body = http.MaxBytesReader(w, r.Body, 1024)
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			slog.Info("input reject", "session", name, "reason", "invalid_body", "err", err.Error())
+			slog.Info(inputLogReject, "session", name, "reason", "invalid_body", "err", err.Error())
 			writeInputErr(w, http.StatusBadRequest, "invalid_body", err.Error())
 			return
 		}
 
 		keys, herr := expandInput(body)
 		if herr != nil {
-			slog.Info("input reject", "session", name, "reason", herr.Error())
+			slog.Info(inputLogReject, "session", name, "reason", herr.Error())
 			writeInputErr(w, http.StatusBadRequest, herr.Error(), herr.Error())
 			return
 		}

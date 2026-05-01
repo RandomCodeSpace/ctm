@@ -51,9 +51,9 @@ export function CostChart({ sessionName, className }: Props) {
       series.push({ ts: Date.parse(p.ts), cum });
     }
     const firstTs = series[0].ts;
-    const lastTs = series[series.length - 1].ts;
+    const lastTs = series.at(-1)!.ts;
     const spanMs = Math.max(1, lastTs - firstTs);
-    const peak = series[series.length - 1].cum || 1;
+    const peak = series.at(-1)!.cum || 1;
 
     const pts = series.map((s) => {
       const x = PADDING.left + ((s.ts - firstTs) / spanMs) * INNER_W;

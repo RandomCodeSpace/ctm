@@ -23,19 +23,19 @@ export function SessionInputBar({ sessionName, mode }: SessionInputBarProps) {
   const send = useSendInput(sessionName);
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const errTimer = useRef<number | null>(null);
+  const errTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = useCallback((msg: string) => {
     setErr(msg);
     if (errTimer.current != null) {
-      window.clearTimeout(errTimer.current);
+      globalThis.clearTimeout(errTimer.current);
     }
-    errTimer.current = window.setTimeout(() => setErr(null), 3000);
+    errTimer.current = globalThis.setTimeout(() => setErr(null), 3000);
   }, []);
 
   useEffect(() => {
     return () => {
-      if (errTimer.current != null) window.clearTimeout(errTimer.current);
+      if (errTimer.current != null) globalThis.clearTimeout(errTimer.current);
     };
   }, []);
 

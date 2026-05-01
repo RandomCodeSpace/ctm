@@ -6,9 +6,17 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/output"
+	"github.com/spf13/cobra"
+)
+
+// Repeated overlay messages / format strings extracted to satisfy the
+// no-duplicate-literal rule.
+const (
+	errCreatingConfigDirFmt = "creating config dir: %w"
+	dimStatusLineFmt        = "statusLine: %s"
+	dimEnvFileFmt           = "env file: %s"
 )
 
 func init() {
@@ -130,7 +138,7 @@ const sampleEnvFile = `# ctm-managed env file — sourced by the shell that spaw
 // an existing env file untouched (so user edits survive).
 func writeEnvFile(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating config dir: %w", err)
+		return fmt.Errorf(errCreatingConfigDirFmt, err)
 	}
 	// 0600: env.sh is sourced by the shell that spawns claude and is a
 	// natural place for users to park secrets (API keys, tokens). Default
@@ -155,11 +163,11 @@ func runOverlayStatus(cmd *cobra.Command, args []string) error {
 	path := config.ClaudeOverlayPath()
 	if _, err := os.Stat(path); err == nil {
 		out.Success("overlay active: %s", path)
-		out.Dim("statusLine: %s", statuslineHookCommand())
+		out.Dim(dimStatusLineFmt, statuslineHookCommand())
 		out.Dim("PostToolUse: %s", logToolUseHookCommand())
 		envPath := config.EnvFilePath()
 		if _, err := os.Stat(envPath); err == nil {
-			out.Dim("env file: %s", envPath)
+			out.Dim(dimEnvFileFmt, envPath)
 		}
 	} else {
 		out.Dim("no overlay file at %s", path)
@@ -176,7 +184,7 @@ func runOverlayInit(cmd *cobra.Command, args []string) error {
 	logCmd := logToolUseHookCommand()
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating config dir: %w", err)
+		return fmt.Errorf(errCreatingConfigDirFmt, err)
 	}
 	if err := writeEnvFile(envPath); err != nil {
 		return err
@@ -202,8 +210,8 @@ func runOverlayInit(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Success("created %s", path)
-	out.Dim("env file: %s", envPath)
-	out.Dim("statusLine: %s", slCmd)
+	out.Dim(dimEnvFileFmt, envPath)
+	out.Dim(dimStatusLineFmt, slCmd)
 	out.Dim("PostToolUse hook: %s", logCmd)
 	out.Dim("session logs dir: %s (view: ctm logs)", sessionLogDir())
 	out.Dim("edit with: ctm overlay edit")
@@ -232,7 +240,7 @@ func runOverlayEdit(cmd *cobra.Command, args []string) error {
 	// Create with sample if missing, atomically.
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return fmt.Errorf("creating config dir: %w", err)
+			return fmt.Errorf(errCreatingConfigDirFmt, err)
 		}
 		if err := writeEnvFile(envPath); err != nil {
 			return err
@@ -249,8 +257,8 @@ func runOverlayEdit(cmd *cobra.Command, args []string) error {
 			}
 			f.Close()
 			out.Dim("created sample overlay at %s", path)
-			out.Dim("env file: %s", envPath)
-			out.Dim("statusLine: %s", slCmd)
+			out.Dim(dimEnvFileFmt, envPath)
+			out.Dim(dimStatusLineFmt, slCmd)
 			out.Dim("PostToolUse hook: %s", logCmd)
 		}
 	}

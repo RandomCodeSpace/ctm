@@ -87,14 +87,14 @@ export function DoctorPanel() {
             </p>
           )}
 
-          {!isLoading && !isError && data && data.length === 0 && (
+          {!isLoading && !isError && data?.length === 0 && (
             <p className="px-4 py-8 text-center text-sm text-fg-dim">
               No checks reported.
             </p>
           )}
 
           {!isLoading && !isError && data && data.length > 0 && (
-            <ul role="list" className="divide-y divide-border">
+            <ul className="divide-y divide-border">
               {data.map((check, i) => (
                 <li key={`${check.name}-${i}`}>
                   <DoctorRow check={check} />

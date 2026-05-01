@@ -17,7 +17,7 @@ const INPUT_MAX = 240;
 
 function previewInput(s: string | undefined): string {
   if (!s) return "";
-  const stripped = stripAnsi(s).replace(/\s+/g, " ").trim();
+  const stripped = stripAnsi(s).replaceAll(/\s+/g, " ").trim();
   if (stripped.length <= INPUT_MAX) return stripped;
   return stripped.slice(0, INPUT_MAX - 1) + "…";
 }
@@ -142,7 +142,7 @@ export function ToolCallRow({ row, showSession }: ToolCallRowProps) {
                 {error instanceof Error ? `: ${error.message}` : ""}
               </p>
             )}
-            {detail && detail.diff && (
+            {detail?.diff && (
               <pre
                 data-testid="tool-diff"
                 className="max-w-full overflow-x-auto whitespace-pre px-3 py-2 font-mono text-[11px] leading-5 text-fg"

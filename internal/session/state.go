@@ -20,6 +20,12 @@ import (
 // whenever the shape of diskData or Session changes in a non-additive way.
 const SchemaVersion = 1
 
+// errFmtNotFound is the consistent shape returned by Get/Set/Delete/etc.
+// when a session name is unknown. Callers that distinguish "not found"
+// from other errors do so by string-matching this prefix; a typed
+// sentinel would be a behaviour change.
+const errFmtNotFound = "session %q not found"
+
 // MigrationPlan returns the migrate.Plan for sessions.json. Steps is empty
 // at v1 because the initial migration only stamps the version — no content
 // changes are required to turn an unversioned sessions.json into v1.
@@ -231,7 +237,7 @@ func (s *Store) Get(name string) (*Session, error) {
 	}
 	sess, ok := d.Sessions[name]
 	if !ok {
-		return nil, fmt.Errorf("session %q not found", name)
+		return nil, fmt.Errorf(errFmtNotFound, name)
 	}
 	return sess, nil
 }
@@ -268,7 +274,7 @@ func (s *Store) Delete(name string) error {
 		return err
 	}
 	if _, ok := d.Sessions[name]; !ok {
-		return fmt.Errorf("session %q not found", name)
+		return fmt.Errorf(errFmtNotFound, name)
 	}
 	delete(d.Sessions, name)
 	return s.save(d)
@@ -309,7 +315,7 @@ func (s *Store) Rename(oldName, newName string) error {
 	}
 	sess, ok := d.Sessions[oldName]
 	if !ok {
-		return fmt.Errorf("session %q not found", oldName)
+		return fmt.Errorf(errFmtNotFound, oldName)
 	}
 	if _, exists := d.Sessions[newName]; exists {
 		return fmt.Errorf("session %q already exists", newName)
@@ -334,7 +340,7 @@ func (s *Store) UpdateMode(name, mode string) error {
 	}
 	sess, ok := d.Sessions[name]
 	if !ok {
-		return fmt.Errorf("session %q not found", name)
+		return fmt.Errorf(errFmtNotFound, name)
 	}
 	sess.Mode = mode
 	return s.save(d)
@@ -354,7 +360,7 @@ func (s *Store) UpdateHealth(name, status string) error {
 	}
 	sess, ok := d.Sessions[name]
 	if !ok {
-		return fmt.Errorf("session %q not found", name)
+		return fmt.Errorf(errFmtNotFound, name)
 	}
 	sess.LastHealthStatus = status
 	sess.LastHealthAt = time.Now().UTC()
@@ -375,7 +381,7 @@ func (s *Store) UpdateAttached(name string) error {
 	}
 	sess, ok := d.Sessions[name]
 	if !ok {
-		return fmt.Errorf("session %q not found", name)
+		return fmt.Errorf(errFmtNotFound, name)
 	}
 	sess.LastAttachedAt = time.Now().UTC()
 	return s.save(d)

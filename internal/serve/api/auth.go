@@ -25,6 +25,19 @@ const authUsernameMax = 254
 const authPasswordMin = 8
 const authBodyMax = 1024
 
+const (
+	authMsgPostOnly    = "POST only"
+	authLogLoginReject = "auth login reject"
+)
+
+// HTTP header / value constants shared across handlers in this package.
+const (
+	headerContentType   = "Content-Type"
+	headerCacheControl  = "Cache-Control"
+	contentTypeJSON     = "application/json"
+	cacheControlNoStore = "no-store"
+)
+
 type authCredsBody struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -50,7 +63,7 @@ func AuthStatus(store *auth.Store) http.HandlerFunc {
 				resp.Authenticated = true
 			}
 		}
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(headerContentType, contentTypeJSON)
 		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
@@ -62,7 +75,7 @@ func AuthSignup(store *auth.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
-			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", authMsgPostOnly)
 			return
 		}
 		if auth.Exists() {
@@ -97,7 +110,7 @@ func AuthSignup(store *auth.Store) http.HandlerFunc {
 			return
 		}
 		slog.Info("auth signup ok", "username", body.Username)
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(headerContentType, contentTypeJSON)
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"token":    tok,
@@ -114,7 +127,7 @@ func AuthLogin(store *auth.Store, limiter *auth.Limiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
-			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", authMsgPostOnly)
 			return
 		}
 		ip := clientIP(r)
@@ -124,7 +137,7 @@ func AuthLogin(store *auth.Store, limiter *auth.Limiter) http.HandlerFunc {
 				secs = 1
 			}
 			w.Header().Set("Retry-After", strconv.Itoa(secs))
-			slog.Info("auth login reject", "reason", "rate_limited", "ip", ip)
+			slog.Info(authLogLoginReject, "reason", "rate_limited", "ip", ip)
 			writeInputErr(w, http.StatusTooManyRequests, "rate_limited",
 				"too many login attempts; try again later")
 			return
@@ -136,7 +149,7 @@ func AuthLogin(store *auth.Store, limiter *auth.Limiter) http.HandlerFunc {
 		u, err := auth.Load()
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				slog.Info("auth login reject", "reason", "not_registered")
+				slog.Info(authLogLoginReject, "reason", "not_registered")
 				writeInputErr(w, http.StatusNotFound, "not_registered",
 					"no user exists yet; sign up first")
 				return
@@ -146,7 +159,7 @@ func AuthLogin(store *auth.Store, limiter *auth.Limiter) http.HandlerFunc {
 			return
 		}
 		if u.Username != body.Username || !auth.Verify(u.Password, body.Password) {
-			slog.Info("auth login reject", "reason", "invalid_credentials", "attempted_username", body.Username)
+			slog.Info(authLogLoginReject, "reason", "invalid_credentials", "attempted_username", body.Username)
 			writeInputErr(w, http.StatusUnauthorized, "invalid_credentials",
 				"username or password does not match")
 			return
@@ -158,7 +171,7 @@ func AuthLogin(store *auth.Store, limiter *auth.Limiter) http.HandlerFunc {
 			return
 		}
 		slog.Info("auth login ok", "username", u.Username)
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(headerContentType, contentTypeJSON)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"token":    tok,
 			"username": u.Username,
@@ -183,7 +196,7 @@ func AuthLogout(store *auth.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
-			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+			writeInputErr(w, http.StatusMethodNotAllowed, "method_not_allowed", authMsgPostOnly)
 			return
 		}
 		tok := bearerToken(r)

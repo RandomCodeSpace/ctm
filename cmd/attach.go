@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/RandomCodeSpace/ctm/internal/claude"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/health"
@@ -13,12 +12,23 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
+	"github.com/spf13/cobra"
 )
 
 // preflightCacheTTL is how long an "ok" health result is trusted before
 // the slow checks (env, PATH, workdir) are re-run. This optimizes the
 // reconnect path on flaky mobile networks where SSH drops repeatedly.
 const preflightCacheTTL = 60 * time.Second
+
+// Repeated message templates extracted to satisfy the no-duplicate-literal
+// rule. The verb / format markers are intentional — these are passed to
+// out.Warn / fmt.Errorf at every recreate / reattach branch.
+const (
+	warnUpdateAttached = "could not update attached timestamp: %v"
+	warnUpdateHealth   = "could not update health status: %v"
+	errHealthCheckFmt  = "health check failed: %s"
+	errAttachingFmt    = "attaching to session %q: %w"
+)
 
 // healthCacheValid reports whether the session's last health check was
 // successful and recent enough to skip the slow env/PATH/workdir checks.
@@ -90,7 +100,7 @@ func createAndAttach(name, workdir, _ string, store *session.Store, tc *tmux.Cli
 	}
 
 	if err := store.UpdateAttached(name); err != nil {
-		out.Warn("could not update attached timestamp: %v", err)
+		out.Warn(warnUpdateAttached, err)
 	}
 
 	out.Success("created session %q", name)
@@ -115,14 +125,14 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 		envResult := health.CheckEnvVars(cfg.RequiredEnv)
 		if !envResult.Passed() {
 			out.Error("environment check failed", envResult.Message, envResult.Fix)
-			return fmt.Errorf("health check failed: %s", envResult.Name)
+			return fmt.Errorf(errHealthCheckFmt, envResult.Name)
 		}
 
 		out.Debug(Verbose, "running PATH check...")
 		pathResult := health.CheckPathEntries(cfg.RequiredInPath)
 		if !pathResult.Passed() {
 			out.Error("PATH check failed", pathResult.Message, pathResult.Fix)
-			return fmt.Errorf("health check failed: %s", pathResult.Name)
+			return fmt.Errorf(errHealthCheckFmt, pathResult.Name)
 		}
 	}
 
@@ -131,7 +141,7 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 	wdResult := health.CheckWorkdir(sess.Workdir)
 	if !wdResult.Passed() {
 		out.Error("workdir check failed", wdResult.Message, wdResult.Fix)
-		return fmt.Errorf("health check failed: %s", wdResult.Name)
+		return fmt.Errorf(errHealthCheckFmt, wdResult.Name)
 	}
 
 	// 3. Tmux session check — if missing, recreate with --resume
@@ -144,15 +154,15 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 			return fmt.Errorf("recreating tmux session: %w", err)
 		}
 		if err := store.UpdateHealth(sess.Name, "recreated"); err != nil {
-			out.Warn("could not update health status: %v", err)
+			out.Warn(warnUpdateHealth, err)
 		}
 		if err := store.UpdateAttached(sess.Name); err != nil {
-			out.Warn("could not update attached timestamp: %v", err)
+			out.Warn(warnUpdateAttached, err)
 		}
 		fireHook("on_attach", sess)
 		fireServeEvent("session_attached", sess)
 		if err := tc.Go(sess.Name); err != nil {
-			return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
+			return fmt.Errorf(errAttachingFmt, sess.Name, err)
 		}
 		return nil
 	}
@@ -168,15 +178,15 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 			return fmt.Errorf("respawning pane: %w", err)
 		}
 		if err := store.UpdateHealth(sess.Name, "recovered"); err != nil {
-			out.Warn("could not update health status: %v", err)
+			out.Warn(warnUpdateHealth, err)
 		}
 		if err := store.UpdateAttached(sess.Name); err != nil {
-			out.Warn("could not update attached timestamp: %v", err)
+			out.Warn(warnUpdateAttached, err)
 		}
 		fireHook("on_attach", sess)
 		fireServeEvent("session_attached", sess)
 		if err := tc.Go(sess.Name); err != nil {
-			return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
+			return fmt.Errorf(errAttachingFmt, sess.Name, err)
 		}
 		return nil
 	}
@@ -184,16 +194,16 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 	// 5. All checks passed
 	out.Debug(Verbose, "all pre-flight checks passed")
 	if err := store.UpdateHealth(sess.Name, "ok"); err != nil {
-		out.Warn("could not update health status: %v", err)
+		out.Warn(warnUpdateHealth, err)
 	}
 	if err := store.UpdateAttached(sess.Name); err != nil {
-		out.Warn("could not update attached timestamp: %v", err)
+		out.Warn(warnUpdateAttached, err)
 	}
 
 	fireHook("on_attach", sess)
 	fireServeEvent("session_attached", sess)
 	if err := tc.Go(sess.Name); err != nil {
-		return fmt.Errorf("attaching to session %q: %w", sess.Name, err)
+		return fmt.Errorf(errAttachingFmt, sess.Name, err)
 	}
 	return nil
 }
