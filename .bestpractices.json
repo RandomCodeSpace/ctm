@@ -1,5 +1,5 @@
 {
-  "_comment": "OpenSSF Best Practices answers for the 'passing' tier. The bestpractices.dev BadgeApp reads this file from the repo root (per docs/bestpractices-json.md upstream) when the project is registered there, and uses each <criterion>_status / <criterion>_justification pair as the proposed answer. To trigger re-ingestion after edits, the maintainer opens the project's edit page on bestpractices.dev and clicks 'Save (and continue) 🤖'. Status '?' means 'unknown' and is ignored — safe placeholder. .github/workflows/bestpractices.yml lints this file on every push to main so it stays parseable and on-schema.",
+  "_comment": "OpenSSF Best Practices answers for the 'passing' tier. The bestpractices.dev BadgeApp reads this file from the repo root (per docs/bestpractices-json.md upstream) when the project is registered there, and uses each <criterion>_status / <criterion>_justification pair as the proposed answer. To trigger re-ingestion after edits, the maintainer opens the project's edit page on bestpractices.dev and clicks 'Save (and continue) 🤖'. Status '?' means 'unknown' and is ignored — safe placeholder. .github/workflows/bestpractices.yml lints this file on every push to main so it stays parseable and on-schema. Per the upstream criteria, only the eight criteria with met_url_required=true (contribution, contribution_requirements, license_location, release_notes, report_process, report_archive, vulnerability_report_process, vulnerability_report_private) carry a bare URL in their justification; every other justification is prose only.",
 
   "name": "ctm",
   "description": "Claude Tmux Manager — survive SSH drops, reattach from your phone.",
@@ -11,25 +11,25 @@
   "description_good_justification": "README opens with: 'Claude Tmux Manager — survive SSH drops, reattach from your phone.'",
 
   "interact_status": "Met",
-  "interact_justification": "https://github.com/RandomCodeSpace/ctm/issues — GitHub Issues + Pull Requests are enabled.",
+  "interact_justification": "GitHub Issues + Pull Requests are enabled.",
 
-  "contribution_status": "Unmet",
-  "contribution_justification": "CONTRIBUTING.md not yet authored. Tracked as follow-up; PRs are accepted via the standard GitHub flow in the meantime.",
+  "contribution_status": "Met",
+  "contribution_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md",
 
-  "contribution_requirements_status": "Unmet",
-  "contribution_requirements_justification": "Will be documented in CONTRIBUTING.md once added.",
+  "contribution_requirements_status": "Met",
+  "contribution_requirements_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md#coding-standards",
 
   "floss_license_status": "Met",
-  "floss_license_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE — MIT License.",
+  "floss_license_justification": "MIT License.",
 
   "floss_license_osi_status": "Met",
-  "floss_license_osi_justification": "MIT is OSI-approved (https://opensource.org/license/mit).",
+  "floss_license_osi_justification": "MIT is OSI-approved.",
 
   "license_location_status": "Met",
-  "license_location_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE — LICENSE file at repository root.",
+  "license_location_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE",
 
   "documentation_basics_status": "Met",
-  "documentation_basics_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/README.md documents installation, configuration, and primary commands.",
+  "documentation_basics_justification": "README documents installation, configuration, and primary commands.",
 
   "documentation_interface_status": "Met",
   "documentation_interface_justification": "README has a Commands section listing every external interface (yolo, safe, attach, kill, list, ctm serve, etc.).",
@@ -38,7 +38,7 @@
   "sites_https_justification": "All project URLs are GitHub-hosted and use HTTPS.",
 
   "discussion_status": "Met",
-  "discussion_justification": "https://github.com/RandomCodeSpace/ctm/issues — GitHub Issues serve as the discussion forum.",
+  "discussion_justification": "GitHub Issues serve as the discussion forum.",
 
   "english_status": "Met",
   "english_justification": "All documentation and source comments are in English.",
@@ -59,25 +59,25 @@
   "repo_distributed_justification": "git is a distributed VCS.",
 
   "version_unique_status": "Met",
-  "version_unique_justification": "https://github.com/RandomCodeSpace/ctm/tags — each release is tagged with a unique semver tag.",
+  "version_unique_justification": "Each release is tagged with a unique semver tag.",
 
   "version_semver_status": "Met",
   "version_semver_justification": "Tags follow vMAJOR.MINOR.PATCH.",
 
   "version_tags_status": "Met",
-  "version_tags_justification": "https://github.com/RandomCodeSpace/ctm/releases — releases are git-tagged.",
+  "version_tags_justification": "Releases are git-tagged.",
 
   "release_notes_status": "Met",
-  "release_notes_justification": "Each GitHub Release includes auto-generated notes summarising changes since the previous tag.",
+  "release_notes_justification": "https://github.com/RandomCodeSpace/ctm/releases",
 
   "release_notes_vulns_status": "N/A",
   "release_notes_vulns_justification": "No publicly disclosed vulnerabilities to date.",
 
   "report_process_status": "Met",
-  "report_process_justification": "Bug reports go through GitHub Issues; the README links to the Issues tab.",
+  "report_process_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md#reporting-bugs-or-asking-questions",
 
   "report_tracker_status": "Met",
-  "report_tracker_justification": "https://github.com/RandomCodeSpace/ctm/issues — GitHub Issues.",
+  "report_tracker_justification": "GitHub Issues.",
 
   "report_responses_status": "Met",
   "report_responses_justification": "Issues are triaged by the maintainer on a best-effort basis.",
@@ -86,16 +86,16 @@
   "enhancement_responses_justification": "Feature requests via Issues receive a response (accept / defer / decline) on a best-effort basis.",
 
   "report_archive_status": "Met",
-  "report_archive_justification": "GitHub Issues retains a full archive of reports and responses.",
+  "report_archive_justification": "https://github.com/RandomCodeSpace/ctm/issues?q=is%3Aissue",
 
-  "vulnerability_report_process_status": "Unmet",
-  "vulnerability_report_process_justification": "SECURITY.md not yet authored. Tracked as follow-up; for now, security reports can be filed as a private security advisory on GitHub.",
+  "vulnerability_report_process_status": "Met",
+  "vulnerability_report_process_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/SECURITY.md",
 
   "vulnerability_report_private_status": "Met",
-  "vulnerability_report_private_justification": "https://github.com/RandomCodeSpace/ctm/security/advisories/new — GitHub's private security advisories are enabled.",
+  "vulnerability_report_private_justification": "https://github.com/RandomCodeSpace/ctm/security/advisories/new",
 
   "vulnerability_report_response_status": "Met",
-  "vulnerability_report_response_justification": "Maintainer commits to acknowledging vulnerability reports within 14 days; window will be formalised in SECURITY.md.",
+  "vulnerability_report_response_justification": "Formal response targets in SECURITY.md: acknowledge within 14 days, initial assessment within 30 days, fix High/Critical within 60 days, default 90-day disclosure window.",
 
   "build_status": "Met",
   "build_justification": "Standard `go build -tags sqlite_fts5` builds the binary; `pnpm build` builds the embedded UI.",
@@ -113,10 +113,10 @@
   "test_invocation_justification": "README documents `go test -tags sqlite_fts5 ./...` and `pnpm exec vitest run`.",
 
   "test_most_status": "Met",
-  "test_most_justification": "https://sonarcloud.io/summary/overall?id=RandomCodeSpace_ctm — 85.2% line coverage.",
+  "test_most_justification": "85.2% line coverage measured by SonarCloud across Go + TypeScript.",
 
   "test_continuous_integration_status": "Met",
-  "test_continuous_integration_justification": "https://github.com/RandomCodeSpace/ctm/actions — GitHub Actions runs Go build/test, UI typecheck/test, SonarCloud, CodeQL, and Scorecard on every push and PR.",
+  "test_continuous_integration_justification": "GitHub Actions runs Go build/test, UI typecheck/test, SonarCloud, CodeQL, and Scorecard on every push and PR.",
 
   "test_policy_status": "Met",
   "test_policy_justification": "New features must ship with tests; SonarCloud's new-code coverage gate fails PRs that drop coverage below threshold.",
@@ -125,7 +125,7 @@
   "tests_are_added_justification": "PRs adding functionality include unit and/or integration tests; enforced by the new-code coverage gate.",
 
   "tests_documented_added_status": "Met",
-  "tests_documented_added_justification": "test_policy is enforced in PR review and by the coverage gate; recent PRs (#11–#14) demonstrate the practice.",
+  "tests_documented_added_justification": "test_policy is enforced in PR review and by the coverage gate.",
 
   "warnings_status": "Met",
   "warnings_justification": "go vet, gopls language-server checks, ESLint with strict TypeScript rules, and SonarCloud all run on every push.",
@@ -161,7 +161,7 @@
   "crypto_weaknesses_justification": "No use of MD5, SHA1 (for integrity), DES, RC4, or ECB mode anywhere in the codebase.",
 
   "crypto_pfs_status": "N/A",
-  "crypto_pfs_justification": "ctm binds 127.0.0.1 only; TLS termination is the operator's reverse-proxy responsibility (the README documents the dev.randomcodespace.dev fronting setup).",
+  "crypto_pfs_justification": "ctm binds 127.0.0.1 only; TLS termination is the operator's reverse-proxy responsibility.",
 
   "crypto_password_storage_status": "Met",
   "crypto_password_storage_justification": "Passwords stored as argon2id hashes (V27 single-user auth); never logged or persisted in plaintext.",
@@ -173,7 +173,7 @@
   "delivery_mitm_justification": "Releases delivered via HTTPS (GitHub Releases) with TLS-protected git fetch.",
 
   "delivery_unsigned_status": "Met",
-  "delivery_unsigned_justification": "https://github.com/RandomCodeSpace/ctm/releases — release artifacts include SHA256 checksums via the release.yml workflow.",
+  "delivery_unsigned_justification": "Release artifacts include SHA256 checksums via the release.yml workflow.",
 
   "vulnerabilities_fixed_60_days_status": "Met",
   "vulnerabilities_fixed_60_days_justification": "No publicly disclosed vulnerabilities to date; commitment is to address any future critical reports within 60 days.",
@@ -185,26 +185,26 @@
   "no_leaked_credentials_justification": "SonarCloud's secret-detection rules + GitHub's secret scanning run on every push; no credentials in commit history.",
 
   "static_analysis_status": "Met",
-  "static_analysis_justification": "https://sonarcloud.io/summary/overall?id=RandomCodeSpace_ctm — SonarCloud (Go + TypeScript) and CodeQL (security) run on every push and PR.",
+  "static_analysis_justification": "SonarCloud (Go + TypeScript) and CodeQL (security) run on every push and PR.",
 
   "static_analysis_common_vulnerabilities_status": "Met",
   "static_analysis_common_vulnerabilities_justification": "CodeQL covers OWASP Top-10 vulnerability families; SonarCloud's security profile covers CWE Top-25.",
 
   "static_analysis_fixed_status": "Met",
-  "static_analysis_fixed_justification": "Findings are either fixed in code or explicitly Accepted with a documented justification (see .github/workflows/sonar-bulk-accept.yml).",
+  "static_analysis_fixed_justification": "Findings are either fixed in code or explicitly Accepted with a documented justification.",
 
   "static_analysis_often_status": "Met",
   "static_analysis_often_justification": "Static analysis runs on every push and PR — well exceeding the 'before each release' bar.",
 
-  "dynamic_analysis_status": "N/A",
-  "dynamic_analysis_justification": "ctm is a CLI / HTTP daemon; integration tests exercise the live HTTP surface, which is the realistic dynamic-analysis bar for this class of software.",
+  "dynamic_analysis_status": "Met",
+  "dynamic_analysis_justification": "`go test -race ./...` runs Go's runtime data-race detector on every PR and on every release. The race detector instruments memory accesses across goroutines and panics on a detected race; for a goroutine-heavy HTTP+tmux daemon this is the realistic dynamic-analysis tool.",
 
   "dynamic_analysis_unsafe_status": "N/A",
-  "dynamic_analysis_unsafe_justification": "Go is memory-safe (no manual memory management, bounds-checked slices). The few unsafe.Pointer uses are inside the vendored sqlite3 driver.",
+  "dynamic_analysis_unsafe_justification": "Go is memory-safe (no manual memory management; bounds-checked slices; nil-checked pointer dereferences). Race-detector coverage above provides the meaningful dynamic-safety check.",
 
-  "dynamic_analysis_enable_assertions_status": "N/A",
-  "dynamic_analysis_enable_assertions_justification": "Go has no compile-time assertion mechanism; runtime panics are used for invariant violations.",
+  "dynamic_analysis_enable_assertions_status": "Met",
+  "dynamic_analysis_enable_assertions_justification": "Go's runtime always enables bounds checking, nil-pointer panics, and `go test -race` adds happens-before assertions across goroutines. Test builds run with the race detector enabled; production builds inherit the language-level checks but omit the race detector.",
 
-  "dynamic_analysis_fixed_status": "N/A",
-  "dynamic_analysis_fixed_justification": "Same as dynamic_analysis."
+  "dynamic_analysis_fixed_status": "Met",
+  "dynamic_analysis_fixed_justification": "Any race-detector finding fails CI and must be fixed before merge."
 }

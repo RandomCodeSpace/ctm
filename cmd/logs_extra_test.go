@@ -414,8 +414,15 @@ func TestTailLog_DrainsThenExitsOnContextCancel(t *testing.T) {
 	root := &cobra.Command{}
 	root.SetContext(ctx)
 
+	// wg gates this test on the goroutine fully exiting, including
+	// withFlags' deferred restore of the package-level logs* globals.
+	// Without this, a follow-on test's withFlags read can race the
+	// in-flight defer write — caught by `go test -race`.
+	var wg sync.WaitGroup
 	done := make(chan error, 1)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		withFlags(t, true, true, "", "", "", func() {
 			done <- tailLog(root, path, filterSpec{})
 		})
@@ -433,6 +440,7 @@ func TestTailLog_DrainsThenExitsOnContextCancel(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("tailLog did not exit after cancel")
 	}
+	wg.Wait()
 }
 
 func TestTailLog_NonexistentPathReturnsError(t *testing.T) {
