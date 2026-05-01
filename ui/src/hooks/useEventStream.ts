@@ -68,7 +68,12 @@ export function useEventStream({
     fetchEventSource(url, {
       signal: ctrl.signal,
       headers: { ...authHeaders(), Accept: "text/event-stream" },
-      openWhenHidden: true,
+      // openWhenHidden: false (default). On mobile Safari the OS will
+      // suspend the network when the tab is backgrounded; an "open"
+      // stream is silently dead. Letting fetch-event-source close on
+      // hidden and reopen on visible gives a clean reconnect every
+      // time the user returns, which the server replays from
+      // Last-Event-ID.
       async onopen(res) {
         if (res.status === 401) {
           onUnauthorizedRef.current?.();
