@@ -92,19 +92,8 @@ type subagentsResponse struct {
 // the api package.
 func Subagents(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.Header().Set("Allow", "GET, HEAD")
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-
-		name := r.PathValue("name")
-		if name == "" {
-			writeJSON(w, http.StatusBadRequest, errorBody{Error: "session name required"})
+		name, ok := requireSessionPreamble(w, r)
+		if !ok {
 			return
 		}
 
@@ -317,27 +306,12 @@ func parseSubagentLine(line []byte) (subagentLineMeta, bool) {
 // Mirrors the feed-row summariser's per-tool conventions so a
 // subagent expanded in the UI matches the feed rows shown below it.
 func shortestSubagentInputLabel(tool string, in map[string]any) string {
-	get := func(k string) string {
-		if v, ok := in[k].(string); ok {
-			return v
-		}
-		return ""
-	}
-	switch tool {
-	case "Bash":
-		return truncateHistory(get("command"))
-	case "Edit", "Write", "Read", "MultiEdit", "NotebookEdit":
-		return truncateHistory(get("file_path"))
-	case "Glob", "Grep":
-		return truncateHistory(get("pattern"))
-	case "WebFetch":
-		return truncateHistory(get("url"))
-	case "Task":
-		return truncateHistory(get("description"))
+	if v, ok := truncateToolInputField(tool, in); ok {
+		return v
 	}
 	// Fallback: any "description"-ish key.
 	for _, k := range []string{"description", "prompt", "query"} {
-		if v := get(k); v != "" {
+		if v, ok := in[k].(string); ok && v != "" {
 			return truncateHistory(v)
 		}
 	}

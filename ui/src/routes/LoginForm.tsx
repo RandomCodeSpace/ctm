@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Button } from "@ossrandom/design-system";
 import { ApiError } from "@/lib/api";
 import { useLogin } from "@/hooks/useLogin";
+import { AuthField } from "@/components/auth/AuthField";
+import { serverMessage } from "@/components/auth/serverMessage";
 
 interface Props {
   onSwitchToSignup?: () => void;
@@ -38,8 +40,8 @@ export function LoginForm({ onSwitchToSignup }: Props) {
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-border bg-surface p-6">
       <h1 className="mb-4 text-lg font-bold sm:text-xl">Log in to ctm</h1>
       <form onSubmit={onSubmit} className="space-y-3">
-        <Field label="Email" type="email" value={username} onChange={setUsername} autoComplete="email" />
-        <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
+        <AuthField label="Email" type="email" value={username} onChange={setUsername} autoComplete="email" />
+        <AuthField label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
         {err && (
           <div role="alert" className="text-[11px] text-alert-ember">
             {err}
@@ -71,41 +73,4 @@ export function LoginForm({ onSwitchToSignup }: Props) {
       </form>
     </div>
   );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  autoComplete,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  autoComplete?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
-        {label}
-      </span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete={autoComplete}
-        className="block w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-sm text-fg placeholder:text-fg-dim focus:outline-none focus:ring-1 focus:ring-accent-gold sm:text-xs"
-      />
-    </label>
-  );
-}
-
-function serverMessage(e: unknown): string | undefined {
-  if (e instanceof ApiError && typeof e.body === "object" && e.body !== null) {
-    const m = (e.body as { message?: unknown }).message;
-    if (typeof m === "string") return m;
-  }
-  return undefined;
 }

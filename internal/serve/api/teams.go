@@ -86,19 +86,8 @@ type teamsResponse struct {
 // Teams returns GET /api/sessions/{name}/teams.
 func Teams(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.Header().Set("Allow", "GET, HEAD")
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-
-		name := r.PathValue("name")
-		if name == "" {
-			writeJSON(w, http.StatusBadRequest, errorBody{Error: "session name required"})
+		name, ok := requireSessionPreamble(w, r)
+		if !ok {
 			return
 		}
 
