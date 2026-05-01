@@ -20,9 +20,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/RandomCodeSpace/ctm/internal/fsutil"
 )
 
 // Step migrates a JSON object in-place from version v to v+1, where v is
@@ -119,41 +120,9 @@ func Run(path string, p Plan) (Result, error) {
 		return Result{Before: from}, fmt.Errorf("migrate %s: write backup: %w", p.Name, err)
 	}
 
-	if err := atomicWriteFile(path, out, perm); err != nil {
+	if err := fsutil.AtomicWriteFile(path, out, perm); err != nil {
 		return Result{Before: from, Backup: backupPath}, fmt.Errorf("migrate %s: write: %w", p.Name, err)
 	}
 
 	return Result{Before: from, After: p.CurrentVersion, Backup: backupPath}, nil
-}
-
-// atomicWriteFile writes data to path via a temp file in the same directory
-// followed by rename(2). Mirrors internal/claude/jsonpatch.go; duplicated
-// rather than extracted here to keep the migrate package self-contained.
-// A follow-up commit can consolidate both into internal/fsutil if a third
-// caller appears.
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	base := filepath.Base(path) + ".*"
-	tmp, err := os.CreateTemp(dir, base)
-	if err != nil {
-		return fmt.Errorf("create temp: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) //nolint:errcheck
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close() //nolint:errcheck
-		return fmt.Errorf("write temp: %w", err)
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close() //nolint:errcheck
-		return fmt.Errorf("chmod temp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close temp: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("rename temp: %w", err)
-	}
-	return nil
 }
