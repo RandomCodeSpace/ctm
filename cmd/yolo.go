@@ -61,100 +61,6 @@ var safeCmd = &cobra.Command{
 	RunE:              runSafe,
 }
 
-// modeContext bundles everything runYoloBang + runSafe need before they
-// branch into mode-specific work: serve started, config loaded, store +
-// tmux client constructed, name resolved (default "claude"), workdir
-// resolved via resolveWorkdir. runYolo doesn't fit this shape — it
-// resolves workdir from up-to-two positional args.
-type modeContext struct {
-	out     *output.Printer
-	cfg     config.Config
-	store   *session.Store
-	tc      *tmux.Client
-	name    string
-	workdir string
-}
-
-func setupModeContext(cmd *cobra.Command, args []string) (*modeContext, error) {
-	proc.EnsureServeRunning(cmd.Context())
-	out := output.Stdout()
-	cfgPtr, err := ensureSetup()
-	if err != nil {
-		return nil, err
-	}
-
-	store := session.NewStore(config.SessionsPath())
-	tc := tmux.NewClient(config.TmuxConfPath())
-
-	name := "claude"
-	if len(args) > 0 {
-		name = args[0]
-	}
-	if err := session.ValidateName(name); err != nil {
-		return nil, err
-	}
-
-	workdir, err := resolveWorkdir(name, store, tc)
-	if err != nil {
-		return nil, err
-	}
-
-	return &modeContext{out: out, cfg: *cfgPtr, store: store, tc: tc, name: name, workdir: workdir}, nil
-}
-
-// modeAttachOptions encodes the per-mode differences in the resume-or-
-// recreate dance shared by runYolo and runSafe: banner color, lifecycle
-// event names, and whether a failed store.Delete is loud.
-type modeAttachOptions struct {
-	mode       string // "yolo" or "safe"
-	bannerYolo bool   // true → out.Magenta; false → out.Success
-	bannerText string // ">>> YOLO MODE" / ">>> SAFE MODE"
-	hookEvent  string // "on_yolo" / "on_safe"
-	serveEvent string // "on_yolo" / "session_attached"
-	// loudOnDeleteErr: yolo warns when store.Delete fails because losing
-	// the prior record matters for safety auditing; safe-mode demotion
-	// silently swallows it (the user is already moving away from a
-	// degraded state).
-	loudOnDeleteErr bool
-}
-
-func runResumeOrRecreate(opts modeAttachOptions, name, workdir string, cfg config.Config, store *session.Store, tc *tmux.Client, out *output.Printer) error {
-	if opts.bannerYolo {
-		out.Magenta("%s", opts.bannerText)
-	} else {
-		out.Success("%s", opts.bannerText)
-	}
-	intent := yoloIntent(store, name, workdir, opts.mode)
-	fireHook(opts.hookEvent, intent)
-	fireServeEvent(opts.serveEvent, intent)
-
-	// If session exists and mode matches → preflight. preflight handles both
-	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
-	// so the session's claude history survives `claude` exiting on its own.
-	// Mode change (safe ↔ yolo) drops tmux + store record so a fresh UUID
-	// is minted; force-fresh escape hatches: `ctm yolo!` / `ctm kill <name>`
-	// / `ctm forget <name>`.
-	if sess, err := store.Get(name); err == nil {
-		if shouldResumeExisting(sess, opts.mode) {
-			out.Debug(Verbose, "existing %s session %q — running pre-flight", opts.mode, name)
-			return preflight(sess, cfg, store, tc, out)
-		}
-		if tc.HasSession(name) {
-			if err := tc.KillSession(name); err != nil {
-				out.Warn("could not kill existing session: %v", err)
-			}
-		}
-		if err := store.Delete(name); err != nil {
-			if opts.loudOnDeleteErr {
-				out.Warn("could not remove session from store: %v", err)
-			}
-		}
-	}
-
-	out.Debug(Verbose, "creating %s session: %s", opts.mode, name)
-	return createAndAttach(name, workdir, opts.mode, store, tc, out)
-}
-
 func runYolo(cmd *cobra.Command, args []string) error {
 	proc.EnsureServeRunning(cmd.Context())
 	out := output.Stdout()
@@ -211,60 +117,144 @@ func runYolo(cmd *cobra.Command, args []string) error {
 		gitCheckpoint(workdir, out)
 	}
 
-	return runResumeOrRecreate(modeAttachOptions{
-		mode:            "yolo",
-		bannerYolo:      true,
-		bannerText:      ">>> YOLO MODE",
-		hookEvent:       "on_yolo",
-		serveEvent:      "on_yolo",
-		loudOnDeleteErr: true,
-	}, name, workdir, cfg, store, tc, out)
+	out.Magenta(">>> YOLO MODE")
+	{
+		intent := yoloIntent(store, name, workdir, "yolo")
+		fireHook("on_yolo", intent)
+		fireServeEvent("on_yolo", intent)
+	}
+
+	// If session exists and mode matches → preflight. preflight handles both
+	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
+	// so the session's claude history survives `claude` exiting on its own.
+	// Only kill/delete when the mode actually changes (safe → yolo) or when
+	// the user forces fresh state via `ctm yolo!` / `ctm kill`.
+	if sess, err := store.Get(name); err == nil {
+		if shouldResumeExisting(sess, "yolo") {
+			out.Debug(Verbose, "existing yolo session %q — running pre-flight", name)
+			return preflight(sess, cfg, store, tc, out)
+		}
+		// Mode change: drop tmux + store record so a fresh UUID is minted.
+		if tc.HasSession(name) {
+			if err := tc.KillSession(name); err != nil {
+				out.Warn("could not kill existing session: %v", err)
+			}
+		}
+		if err := store.Delete(name); err != nil {
+			out.Warn("could not remove session from store: %v", err)
+		}
+	}
+
+	out.Debug(Verbose, "creating yolo session: %s", name)
+	return createAndAttach(name, workdir, "yolo", store, tc, out)
 }
 
 func runYoloBang(cmd *cobra.Command, args []string) error {
-	mc, err := setupModeContext(cmd, args)
+	proc.EnsureServeRunning(cmd.Context())
+	out := output.Stdout()
+	cfgPtr, err := ensureSetup()
+	if err != nil {
+		return err
+	}
+	cfg := *cfgPtr
+
+	store := session.NewStore(config.SessionsPath())
+	tc := tmux.NewClient(config.TmuxConfPath())
+
+	name := "claude"
+	if len(args) > 0 {
+		name = args[0]
+	}
+	if err := session.ValidateName(name); err != nil {
+		return err
+	}
+
+	// Get workdir from existing session or pane path
+	workdir, err := resolveWorkdir(name, store, tc)
 	if err != nil {
 		return err
 	}
 
-	if mc.cfg.GitCheckpointBeforeYolo {
-		gitCheckpoint(mc.workdir, mc.out)
+	if cfg.GitCheckpointBeforeYolo {
+		gitCheckpoint(workdir, out)
 	}
 
-	mc.out.Magenta(">>> YOLO MODE")
-	intent := yoloIntent(mc.store, mc.name, mc.workdir, "yolo")
-	fireHook("on_yolo", intent)
-	fireServeEvent("on_yolo", intent)
+	out.Magenta(">>> YOLO MODE")
+	{
+		intent := yoloIntent(store, name, workdir, "yolo")
+		fireHook("on_yolo", intent)
+		fireServeEvent("on_yolo", intent)
+	}
 
-	if mc.tc.HasSession(mc.name) {
-		if err := mc.tc.KillSession(mc.name); err != nil {
-			mc.out.Warn("could not kill existing session: %v", err)
+	if tc.HasSession(name) {
+		if err := tc.KillSession(name); err != nil {
+			out.Warn("could not kill existing session: %v", err)
 		}
 	}
-	if err := mc.store.Delete(mc.name); err != nil {
-		// ignore "not found" errors — yolo! is force-recreate by design
+	if err := store.Delete(name); err != nil {
+		// ignore "not found" errors
 		_ = err
 	}
 
-	return createAndAttach(mc.name, mc.workdir, "yolo", mc.store, mc.tc, mc.out)
+	return createAndAttach(name, workdir, "yolo", store, tc, out)
 }
 
 func runSafe(cmd *cobra.Command, args []string) error {
-	mc, err := setupModeContext(cmd, args)
+	proc.EnsureServeRunning(cmd.Context())
+	out := output.Stdout()
+	cfgPtr, err := ensureSetup()
+	if err != nil {
+		return err
+	}
+	cfg := *cfgPtr
+
+	store := session.NewStore(config.SessionsPath())
+	tc := tmux.NewClient(config.TmuxConfPath())
+
+	name := "claude"
+	if len(args) > 0 {
+		name = args[0]
+	}
+	if err := session.ValidateName(name); err != nil {
+		return err
+	}
+
+	// Get workdir from existing session or pane path
+	workdir, err := resolveWorkdir(name, store, tc)
 	if err != nil {
 		return err
 	}
 
-	return runResumeOrRecreate(modeAttachOptions{
-		mode:            "safe",
-		bannerYolo:      false,
-		bannerText:      ">>> SAFE MODE",
-		hookEvent:       "on_safe",
-		// "on_safe" maps to a serve session_attached — the hub doesn't
+	out.Success(">>> SAFE MODE")
+	{
+		intent := yoloIntent(store, name, workdir, "safe")
+		fireHook("on_safe", intent)
+		// Map "on_safe" to a serve session_attached — the hub doesn't
 		// model safe-mode separately, only the lifecycle transition.
-		serveEvent:      "session_attached",
-		loudOnDeleteErr: false,
-	}, mc.name, mc.workdir, mc.cfg, mc.store, mc.tc, mc.out)
+		fireServeEvent("session_attached", intent)
+	}
+
+	// If session exists and mode matches → preflight. preflight handles both
+	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
+	// so the session's claude history survives `claude` exiting on its own.
+	// Force-fresh escape hatches: `ctm kill <name>` / `ctm forget <name>`.
+	if sess, err := store.Get(name); err == nil {
+		if shouldResumeExisting(sess, "safe") {
+			out.Debug(Verbose, "existing safe session %q — running pre-flight", name)
+			return preflight(sess, cfg, store, tc, out)
+		}
+		// Mode change: drop tmux + store record so a fresh UUID is minted.
+		if tc.HasSession(name) {
+			if err := tc.KillSession(name); err != nil {
+				out.Warn("could not kill existing session: %v", err)
+			}
+		}
+		if err := store.Delete(name); err != nil {
+			_ = err
+		}
+	}
+
+	return createAndAttach(name, workdir, "safe", store, tc, out)
 }
 
 // resolveWorkdir returns the workdir for name: from store if present, else from
