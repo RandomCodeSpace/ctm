@@ -19,12 +19,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/RandomCodeSpace/ctm/internal/fsutil"
 )
 
 // Decode reads path and strictly decodes into v (which must be a
@@ -93,7 +94,7 @@ func Decode(path string, v any) error {
 		return fmt.Errorf("jsonstrict marshal stripped: %w", merr)
 	}
 
-	if werr := atomicWriteFile(path, out, perm); werr != nil {
+	if werr := fsutil.AtomicWriteFile(path, out, perm); werr != nil {
 		return fmt.Errorf("jsonstrict write stripped: %w", werr)
 	}
 
@@ -160,35 +161,5 @@ func collectKeys(t reflect.Type, out map[string]struct{}) {
 	}
 }
 
-// atomicWriteFile mirrors the pattern used across the codebase
-// (internal/claude/jsonpatch.go, internal/migrate/migrate.go): write a
-// temp file in the same directory, chmod to perm, rename atomically.
-// Duplicated here to keep this package self-contained; a future commit
-// can extract all three into internal/fsutil.
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*")
-	if err != nil {
-		return fmt.Errorf("create temp: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) //nolint:errcheck
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close() //nolint:errcheck
-		return fmt.Errorf("write temp: %w", err)
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close() //nolint:errcheck
-		return fmt.Errorf("chmod temp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close temp: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("rename temp: %w", err)
-	}
-	return nil
-}
 
 var _ = strconv.Itoa // reserved for future use

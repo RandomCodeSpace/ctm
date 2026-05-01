@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+
+	"github.com/RandomCodeSpace/ctm/internal/fsutil"
 )
 
 // patchJSONFile reads path, applies patch to the top-level JSON object, and
@@ -53,36 +54,5 @@ func patchJSONFile(path string, patch func(obj map[string]json.RawMessage) bool)
 		return fmt.Errorf("marshalling %s: %w", path, err)
 	}
 
-	return atomicWriteFile(path, out, info.Mode().Perm())
-}
-
-// atomicWriteFile writes data to path via a temp file in the same directory
-// followed by rename(2), so readers never see a half-written file. The temp
-// file's mode is forced to perm before close to avoid the default 0600 from
-// os.CreateTemp overriding the caller's intent after rename.
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	base := filepath.Base(path) + ".*"
-	tmp, err := os.CreateTemp(dir, base)
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) //nolint:errcheck
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close() //nolint:errcheck
-		return fmt.Errorf("writing temp file: %w", err)
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close() //nolint:errcheck
-		return fmt.Errorf("chmod temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("closing temp file: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("renaming temp file: %w", err)
-	}
-	return nil
+	return fsutil.AtomicWriteFile(path, out, info.Mode().Perm())
 }
