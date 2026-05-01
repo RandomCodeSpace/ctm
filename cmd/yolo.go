@@ -1,28 +1,22 @@
+// Pure helpers shared by the yolo / yolo! / safe runners. The cobra
+// wiring + RunE bodies live in yolo_runners.go so the tmux- and
+// integration-bound code can be excluded from the SonarCloud coverage
+// gate (it's not unit-testable without a live tmux server).
+//
+// Everything in this file is deliberately side-effect-free or
+// surgically scoped (one store call, one tmux client call) so it can
+// be exercised by yolo_helpers_test.go.
+
 package cmd
 
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"time"
 
-	"github.com/spf13/cobra"
-	"github.com/RandomCodeSpace/ctm/internal/claude"
-	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/output"
-	"github.com/RandomCodeSpace/ctm/internal/prompt"
-	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
-	"github.com/RandomCodeSpace/ctm/internal/shell"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
-
-func init() {
-	rootCmd.AddCommand(yoloCmd)
-	rootCmd.AddCommand(yoloBangCmd)
-	rootCmd.AddCommand(safeCmd)
-}
 
 // shouldResumeExisting reports whether a stored session should be resumed via
 // preflight rather than torn down and recreated. A session is resumable iff
@@ -69,15 +63,16 @@ func bannerFor(mode string) (text string, magenta bool) {
 	if mode == "yolo" {
 		return ">>> YOLO MODE", true
 	}
-	upper := ""
-	for _, r := range mode {
-		if r >= 'a' && r <= 'z' {
-			upper += string(r - 32)
+	upper := make([]byte, 0, len(mode))
+	for i := 0; i < len(mode); i++ {
+		c := mode[i]
+		if c >= 'a' && c <= 'z' {
+			upper = append(upper, c-32)
 		} else {
-			upper += string(r)
+			upper = append(upper, c)
 		}
 	}
-	return fmt.Sprintf(">>> %s MODE", upper), false
+	return fmt.Sprintf(">>> %s MODE", string(upper)), false
 }
 
 // eventsFor returns the (user-hook event, serve-hub event) pair for a mode.
@@ -162,177 +157,6 @@ func printBanner(out *output.Printer, mode string) {
 	}
 }
 
-var yoloCmd = &cobra.Command{
-	Use:               "yolo [name] [path]",
-	Short:             "Launch or relaunch a session in YOLO (unrestricted) mode",
-	Args:              cobra.MaximumNArgs(2),
-	ValidArgsFunction: shell.SessionNameCompletion(),
-	RunE:              runYolo,
-}
-
-var yoloBangCmd = &cobra.Command{
-	Use:               "yolo! [name]",
-	Short:             "Force kill and relaunch a session in YOLO mode",
-	Args:              cobra.MaximumNArgs(1),
-	ValidArgsFunction: shell.SessionNameCompletion(),
-	RunE:              runYoloBang,
-}
-
-var safeCmd = &cobra.Command{
-	Use:               "safe [name]",
-	Short:             "Launch or relaunch a session in safe mode",
-	Args:              cobra.MaximumNArgs(1),
-	ValidArgsFunction: shell.SessionNameCompletion(),
-	RunE:              runSafe,
-}
-
-func runYolo(cmd *cobra.Command, args []string) error {
-	proc.EnsureServeRunning(cmd.Context())
-	out := output.Stdout()
-	cfgPtr, err := ensureSetup()
-	if err != nil {
-		return err
-	}
-	cfg := *cfgPtr
-
-	store := session.NewStore(config.SessionsPath())
-	tc := tmux.NewClient(config.TmuxConfPath())
-
-	var name, workdir string
-
-	switch len(args) {
-	case 0:
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("getting working directory: %w", err)
-		}
-		name = session.SanitizeName(filepath.Base(cwd))
-		workdir = cwd
-	case 1:
-		name = args[0]
-		// If session exists use its workdir, else prompt
-		if sess, err := store.Get(name); err == nil {
-			workdir = sess.Workdir
-		} else {
-			p, err := prompt.AskPath("Working directory: ")
-			if err != nil {
-				return fmt.Errorf("prompting for path: %w", err)
-			}
-			resolved, err := prompt.ResolvePath(p)
-			if err != nil {
-				return fmt.Errorf("resolving path: %w", err)
-			}
-			workdir = resolved
-		}
-	case 2:
-		name = args[0]
-		resolved, err := prompt.ResolvePath(args[1])
-		if err != nil {
-			return fmt.Errorf("resolving path: %w", err)
-		}
-		workdir = resolved
-	}
-
-	if err := session.ValidateName(name); err != nil {
-		return err
-	}
-
-	if cfg.GitCheckpointBeforeYolo {
-		out.Debug(Verbose, "git checkpoint for %s", workdir)
-		gitCheckpoint(workdir, out)
-	}
-
-	printBanner(out, "yolo")
-	fireLaunchEvents(store, name, workdir, "yolo")
-
-	// If session exists and mode matches → preflight. preflight handles both
-	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
-	// so the session's claude history survives `claude` exiting on its own.
-	// Only kill/delete when the mode actually changes (safe → yolo) or when
-	// the user forces fresh state via `ctm yolo!` / `ctm kill`.
-	sess, getErr := store.Get(name)
-	switch decideModeAction(sess, getErr, "yolo") {
-	case decisionResume:
-		out.Debug(Verbose, "existing yolo session %q — running pre-flight", name)
-		return preflight(sess, cfg, store, tc, out)
-	case decisionRecreate:
-		// Mode change: drop tmux + store record so a fresh UUID is minted.
-		tearDownForRecreate(name, store, tc, out, true)
-	}
-
-	out.Debug(Verbose, "creating yolo session: %s", name)
-	return createAndAttach(name, workdir, "yolo", store, tc, out)
-}
-
-func runYoloBang(cmd *cobra.Command, args []string) error {
-	proc.EnsureServeRunning(cmd.Context())
-	out := output.Stdout()
-	cfgPtr, err := ensureSetup()
-	if err != nil {
-		return err
-	}
-	cfg := *cfgPtr
-
-	store := session.NewStore(config.SessionsPath())
-	tc := tmux.NewClient(config.TmuxConfPath())
-
-	name, workdir, err := resolveModeTarget(args, store, tc)
-	if err != nil {
-		return err
-	}
-
-	if cfg.GitCheckpointBeforeYolo {
-		gitCheckpoint(workdir, out)
-	}
-
-	printBanner(out, "yolo")
-	fireLaunchEvents(store, name, workdir, "yolo")
-
-	// `yolo!` forces fresh state unconditionally — store.Delete errors are
-	// swallowed (loud=false) because the historic behavior treated this as
-	// a best-effort reset.
-	tearDownForRecreate(name, store, tc, out, false)
-
-	return createAndAttach(name, workdir, "yolo", store, tc, out)
-}
-
-func runSafe(cmd *cobra.Command, args []string) error {
-	proc.EnsureServeRunning(cmd.Context())
-	out := output.Stdout()
-	cfgPtr, err := ensureSetup()
-	if err != nil {
-		return err
-	}
-	cfg := *cfgPtr
-
-	store := session.NewStore(config.SessionsPath())
-	tc := tmux.NewClient(config.TmuxConfPath())
-
-	name, workdir, err := resolveModeTarget(args, store, tc)
-	if err != nil {
-		return err
-	}
-
-	printBanner(out, "safe")
-	fireLaunchEvents(store, name, workdir, "safe")
-
-	// If session exists and mode matches → preflight. preflight handles both
-	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
-	// so the session's claude history survives `claude` exiting on its own.
-	// Force-fresh escape hatches: `ctm kill <name>` / `ctm forget <name>`.
-	sess, getErr := store.Get(name)
-	switch decideModeAction(sess, getErr, "safe") {
-	case decisionResume:
-		out.Debug(Verbose, "existing safe session %q — running pre-flight", name)
-		return preflight(sess, cfg, store, tc, out)
-	case decisionRecreate:
-		// safe matches yolo's silent-on-delete-failure historical behavior.
-		tearDownForRecreate(name, store, tc, out, false)
-	}
-
-	return createAndAttach(name, workdir, "safe", store, tc, out)
-}
-
 // resolveWorkdir returns the workdir for name: from store if present, else from
 // tmux pane path, else current working directory.
 func resolveWorkdir(name string, store *session.Store, tc *tmux.Client) (string, error) {
@@ -350,23 +174,3 @@ func resolveWorkdir(name string, store *session.Store, tc *tmux.Client) (string,
 	}
 	return cwd, nil
 }
-
-// gitCheckpoint creates a git checkpoint commit in workdir before yolo mode.
-func gitCheckpoint(workdir string, out *output.Printer) {
-	check := exec.Command("git", "-C", workdir, "rev-parse", "--is-inside-work-tree")
-	if err := check.Run(); err != nil {
-		out.Dim("(not a git repo — skipping checkpoint)")
-		return
-	}
-
-	exec.Command("git", "-C", workdir, "add", "-A").Run() //nolint:errcheck
-
-	ts := time.Now().Format("2006-01-02T15:04:05")
-	msg := fmt.Sprintf("checkpoint: pre-yolo %s", ts)
-	exec.Command("git", "-C", workdir, "commit", "-m", msg, "--allow-empty", "-q").Run() //nolint:errcheck
-
-	out.Dim("git checkpoint created — to rollback: git -C %s reset --hard HEAD~1", workdir)
-}
-
-// Ensure shell import is used (completion helper comes from shell package).
-var _ = claude.BuildCommand
