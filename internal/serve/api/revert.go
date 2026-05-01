@@ -67,8 +67,8 @@ func Revert(
 		if err != nil {
 			var dirty *git.DirtyError
 			if errors.As(err, &dirty) {
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Cache-Control", "no-store")
+				w.Header().Set(headerContentType, contentTypeJSON)
+				w.Header().Set(headerCacheControl, cacheControlNoStore)
 				w.WriteHeader(http.StatusConflict)
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"error":       "dirty_workdir",
@@ -85,22 +85,22 @@ func Revert(
 			if result.StashedAs != "" {
 				body["stashed_as"] = result.StashedAs
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set(headerContentType, contentTypeJSON)
+			w.Header().Set(headerCacheControl, cacheControlNoStore)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(body)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set(headerContentType, contentTypeJSON)
+		w.Header().Set(headerCacheControl, cacheControlNoStore)
 		_ = json.NewEncoder(w).Encode(result)
 	}
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(headerContentType, contentTypeJSON)
+	w.Header().Set(headerCacheControl, cacheControlNoStore)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }

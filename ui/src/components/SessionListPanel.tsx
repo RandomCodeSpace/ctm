@@ -54,7 +54,7 @@ export function SessionListPanel({
             onChange={(e) => setShowAll(e.target.checked)}
             className="h-3 w-3 cursor-pointer accent-accent-gold"
           />
-          Show all
+          <span>Show all</span>
         </label>
       </header>
 
@@ -93,7 +93,7 @@ export function SessionListPanel({
           </p>
         )}
 
-        <ul role="list">
+        <ul>
           {visible.map((s) => (
             <li key={s.name}>
               <SessionCard session={s} active={s.name === activeName} />

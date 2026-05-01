@@ -39,6 +39,9 @@ import (
 	"sync"
 	"time"
 
+	// Blank import registers the "sqlite3" driver with database/sql so
+	// sql.Open("sqlite3", …) below can resolve it. Build is gated on the
+	// `sqlite_fts5` build tag (see Makefile / sonar-project.properties).
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -131,6 +134,11 @@ func OpenCostStore(path string) (CostStore, error) {
 	return &sqliteCostStore{db: db}, nil
 }
 
+// errCostStoreClosed is returned by every method after Close — the
+// `db == nil` guard collapses to one sentinel for callers and removes
+// the duplicated literal Sonar previously flagged.
+const errCostStoreClosedMsg = "cost store closed"
+
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS cost_points(
   ts              INTEGER NOT NULL, -- unix millis
@@ -186,7 +194,7 @@ func (s *sqliteCostStore) Insert(points []Point) error {
 	closed := s.closed
 	s.mu.Unlock()
 	if closed {
-		return errors.New("cost store closed")
+		return errors.New(errCostStoreClosedMsg)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -226,7 +234,7 @@ func (s *sqliteCostStore) Range(session string, since, until time.Time) ([]Point
 	closed := s.closed
 	s.mu.Unlock()
 	if closed {
-		return nil, errors.New("cost store closed")
+		return nil, errors.New(errCostStoreClosedMsg)
 	}
 	sinceMs := since.UnixMilli()
 	untilMs := until.UnixMilli()
@@ -283,7 +291,7 @@ func (s *sqliteCostStore) Totals(since time.Time) (Totals, error) {
 	closed := s.closed
 	s.mu.Unlock()
 	if closed {
-		return Totals{}, errors.New("cost store closed")
+		return Totals{}, errors.New(errCostStoreClosedMsg)
 	}
 	// Cost is an append-only cumulative-delta series: every row is a
 	// token snapshot at a point in time. The totals view the handler

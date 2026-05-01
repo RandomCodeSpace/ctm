@@ -48,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onStorage = (e: StorageEvent) => {
       if (e.key === TOKEN_KEY) setTokenState(e.newValue);
     };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    globalThis.addEventListener("storage", onStorage);
+    return () => globalThis.removeEventListener("storage", onStorage);
   }, []);
 
   // Subscribe to TanStack Query failures — 401s from any query trigger sign-out.

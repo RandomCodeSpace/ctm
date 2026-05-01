@@ -7,7 +7,7 @@ const ANSI_RE = /\x1B\[[0-9;]*[A-Za-z]/g;
 
 /** Strip ANSI escape codes from a string (for tool output preview). */
 export function stripAnsi(s: string): string {
-  return s.replace(ANSI_RE, "");
+  return s.replaceAll(ANSI_RE, "");
 }
 
 /** "12 sec", "3 min", "5 hr", "2 days" — coarse but readable. */

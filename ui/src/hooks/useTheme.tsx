@@ -35,8 +35,8 @@ function loadPref(): ThemePreference {
 
 function resolve(p: ThemePreference): ResolvedTheme {
   if (p !== "system") return p;
-  if (typeof window === "undefined") return "dark";
-  return window.matchMedia("(prefers-color-scheme: light)").matches
+  if (typeof globalThis.window === "undefined") return "dark";
+  return globalThis.matchMedia("(prefers-color-scheme: light)").matches
     ? "light"
     : "dark";
 }
@@ -52,7 +52,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const update = () => setResolved(resolve(preference));
     update();
     if (preference !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const mq = globalThis.matchMedia("(prefers-color-scheme: light)");
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, [preference]);

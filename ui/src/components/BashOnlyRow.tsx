@@ -28,7 +28,7 @@ function truncate(s: string, max: number): string {
 export function BashOnlyRow({ row }: BashOnlyRowProps) {
   const [open, setOpen] = useState(false);
 
-  const cmdFull = stripAnsi(row.input ?? "").replace(/\s+/g, " ").trim();
+  const cmdFull = stripAnsi(row.input ?? "").replaceAll(/\s+/g, " ").trim();
   const cmdLine = truncate(cmdFull, CMD_MAX);
 
   const hasExit = typeof row.exit_code === "number";

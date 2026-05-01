@@ -71,7 +71,7 @@ export function SubagentTree({ sessionName }: { sessionName: string }) {
         </p>
       )}
 
-      <ul role="list" className="divide-y divide-border">
+      <ul className="divide-y divide-border">
         {rows.map((node) => (
           <SubagentRow
             key={node.id}

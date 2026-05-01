@@ -128,7 +128,7 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
           {recents.length > 0 && (
             <div style={{ marginTop: 12 }}>
               <div className="rcs-label" style={{ marginBottom: 4 }}>Recents</div>
-              <ul role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: 0, padding: 0, listStyle: "none" }}>
+              <ul style={{ display: "flex", flexDirection: "column", gap: 2, margin: 0, padding: 0, listStyle: "none" }}>
                 {recents.map((r) => (
                   <li key={r}>
                     <Button
@@ -149,10 +149,7 @@ export function NewSessionModal({ open, onClose, recents }: NewSessionModalProps
           )}
 
           <div className="rcs-label" style={{ marginTop: 16, marginBottom: 4 }}>
-            Initial prompt
-            <span style={{ marginLeft: 6, fontWeight: "normal", textTransform: "none", letterSpacing: 0, color: "var(--fg-3)" }}>
-              (optional — sent after boot)
-            </span>
+            Initial prompt<span style={{ marginLeft: 6, fontWeight: "normal", textTransform: "none", letterSpacing: 0, color: "var(--fg-3)" }}>(optional — sent after boot)</span>
           </div>
           <Textarea
             value={initialPrompt}
@@ -193,10 +190,7 @@ function CollisionBody({
           {collision.session.name}
         </code>{" "}
         already exists for{" "}
-        <code style={{ fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all" }}>
-          {collision.session.workdir}
-        </code>
-        .
+        <code style={{ fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all" }}>{collision.session.workdir}</code>.
       </p>
 
       {renaming && (
@@ -254,7 +248,7 @@ function CollisionFooter({
 
 function suggestRename(name: string): string {
   const m = /^(.*?)-(\d+)$/.exec(name);
-  if (m) return `${m[1]}-${parseInt(m[2], 10) + 1}`;
+  if (m) return `${m[1]}-${Number.parseInt(m[2], 10) + 1}`;
   return `${name}-2`;
 }
 

@@ -99,7 +99,7 @@ export function FeedStream({
     // hasn't delivered yet), fall back to "now" so the first click
     // still asks the server for anything older than the present
     // moment — it's a best-effort upper bound.
-    const oldest = rows[rows.length - 1];
+    const oldest = rows.at(-1);
     const cursor = oldest
       ? cursorFromRow(oldest)
       : `${BigInt(Date.now()) * 1_000_000n}-0`;
@@ -143,7 +143,7 @@ export function FeedStream({
           {emptyMessage}
         </p>
       ) : (
-        <ol role="list" className="flex flex-col">
+        <ol className="flex flex-col">
           {rows.map((row, i) => (
             <li key={`${row.ts}-${i}`}>
               {bashOnly ? (

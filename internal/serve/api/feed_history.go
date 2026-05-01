@@ -62,6 +62,8 @@ const (
 	// historyInputMax mirrors the tailer's inputSummaryMax so summaries
 	// look identical whether sourced live (SSE) or from history.
 	historyInputMax = 200
+	// jsonlExt is the per-session claude history file suffix.
+	jsonlExt = ".jsonl"
 )
 
 // feedHistoryEvent mirrors events.Event but lives here for JSON shape
@@ -143,7 +145,7 @@ func FeedHistory(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 			return
 		}
 
-		path := filepath.Join(logDir, uuid+".jsonl")
+		path := filepath.Join(logDir, uuid+jsonlExt)
 		events, hasMore, err := readJSONLReverse(path, name, before, limit)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -207,10 +209,10 @@ func resolveNameToUUID(resolver UUIDNameResolver, logDir, name string) (string, 
 			continue
 		}
 		fn := e.Name()
-		if !strings.HasSuffix(fn, ".jsonl") {
+		if !strings.HasSuffix(fn, jsonlExt) {
 			continue
 		}
-		uuid := strings.TrimSuffix(fn, ".jsonl")
+		uuid := strings.TrimSuffix(fn, jsonlExt)
 		if got, ok := resolver.ResolveUUID(uuid); ok && got == name {
 			return uuid, true
 		}

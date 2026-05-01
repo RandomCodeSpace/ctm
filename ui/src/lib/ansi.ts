@@ -45,10 +45,7 @@ const COLOUR_NAMES: Record<number, string> = {
 };
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 interface State {
@@ -131,7 +128,7 @@ export function ansiToHtml(input: string): string {
     const codes = m[1]
       .split(";")
       .filter((p) => p.length > 0)
-      .map((p) => parseInt(p, 10))
+      .map((p) => Number.parseInt(p, 10))
       .filter((n) => Number.isFinite(n));
     closeIfNeeded();
     state = applySGR(state, codes);

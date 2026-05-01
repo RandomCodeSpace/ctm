@@ -17,7 +17,7 @@ const HUMAN: Record<string, string> = {
 };
 
 function humanize(state: string): string {
-  return HUMAN[state] ?? state.replace(/_/g, " ");
+  return HUMAN[state] ?? state.replaceAll("_", " ");
 }
 
 interface AttentionLabelProps {

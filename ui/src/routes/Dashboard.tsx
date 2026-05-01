@@ -50,8 +50,8 @@ export function Dashboard() {
   useEffect(() => {
     if (name) return;
     if (!sessions || sessions.length === 0) return;
-    if (typeof window === "undefined") return;
-    if (!window.matchMedia("(min-width: 768px)").matches) return;
+    if (typeof globalThis.window === "undefined") return;
+    if (!globalThis.matchMedia("(min-width: 768px)").matches) return;
     const top = sessions
       .filter((s) => s.is_active)
       .slice()

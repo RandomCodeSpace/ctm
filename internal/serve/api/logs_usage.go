@@ -92,7 +92,7 @@ func LogsUsage(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 		// unexpected but not fatal; ignore it entirely.
 		jsonls := 0
 		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), jsonlExt) {
 				jsonls++
 			}
 		}
@@ -111,10 +111,10 @@ func LogsUsage(logDir string, resolver UUIDNameResolver) http.HandlerFunc {
 		files := make([]logsUsageFile, 0, jsonls)
 		var total int64
 		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), jsonlExt) {
 				continue
 			}
-			uuid := strings.TrimSuffix(e.Name(), ".jsonl")
+			uuid := strings.TrimSuffix(e.Name(), jsonlExt)
 			full := filepath.Join(logDir, e.Name())
 			info, err := os.Stat(full)
 			if err != nil {

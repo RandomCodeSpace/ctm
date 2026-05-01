@@ -68,7 +68,7 @@ func Kill(store SessionStore, tmuxClient TmuxMutator, proj ProjRefresher) http.H
 		}
 		name := r.PathValue("name")
 		if name == "" {
-			http.Error(w, "missing session name", http.StatusBadRequest)
+			http.Error(w, errMsgMissingSessionName, http.StatusBadRequest)
 			return
 		}
 
@@ -84,7 +84,7 @@ func Kill(store SessionStore, tmuxClient TmuxMutator, proj ProjRefresher) http.H
 
 		sess, err := store.Get(name)
 		if err != nil {
-			http.Error(w, "session not found", http.StatusNotFound)
+			http.Error(w, errMsgSessionNotFound, http.StatusNotFound)
 			return
 		}
 
@@ -118,7 +118,7 @@ func Forget(store SessionStore, proj ProjRefresher) http.HandlerFunc {
 		}
 		name := r.PathValue("name")
 		if name == "" {
-			http.Error(w, "missing session name", http.StatusBadRequest)
+			http.Error(w, errMsgMissingSessionName, http.StatusBadRequest)
 			return
 		}
 
@@ -134,7 +134,7 @@ func Forget(store SessionStore, proj ProjRefresher) http.HandlerFunc {
 
 		sess, err := store.Get(name)
 		if err != nil {
-			http.Error(w, "session not found", http.StatusNotFound)
+			http.Error(w, errMsgSessionNotFound, http.StatusNotFound)
 			return
 		}
 		if err := store.Delete(name); err != nil {
@@ -165,7 +165,7 @@ func Rename(store SessionStore, tmuxClient TmuxMutator, proj ProjRefresher) http
 		}
 		name := r.PathValue("name")
 		if name == "" {
-			http.Error(w, "missing session name", http.StatusBadRequest)
+			http.Error(w, errMsgMissingSessionName, http.StatusBadRequest)
 			return
 		}
 
@@ -184,7 +184,7 @@ func Rename(store SessionStore, tmuxClient TmuxMutator, proj ProjRefresher) http
 		}
 
 		if _, err := store.Get(name); err != nil {
-			http.Error(w, "session not found", http.StatusNotFound)
+			http.Error(w, errMsgSessionNotFound, http.StatusNotFound)
 			return
 		}
 
@@ -223,7 +223,7 @@ func AttachURL() http.HandlerFunc {
 		}
 		name := r.PathValue("name")
 		if name == "" {
-			http.Error(w, "missing session name", http.StatusBadRequest)
+			http.Error(w, errMsgMissingSessionName, http.StatusBadRequest)
 			return
 		}
 		q := url.Values{}
