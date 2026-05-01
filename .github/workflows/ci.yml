@@ -64,7 +64,13 @@ jobs:
         run: go build -tags sqlite_fts5 ./...
 
       - name: Go test
-        run: go test -tags sqlite_fts5 ./...
+        # -race: Go's runtime data-race detector. Instruments memory
+        # accesses across goroutines and panics on a detected race —
+        # the realistic dynamic-analysis tool for a pure-Go HTTP +
+        # tmux-shelling-out daemon. Satisfies the OpenSSF Best
+        # Practices `dynamic_analysis` and
+        # `dynamic_analysis_enable_assertions` criteria.
+        run: go test -tags sqlite_fts5 -race ./...
 
       - name: UI typecheck
         run: pnpm -C ui exec tsc --noEmit

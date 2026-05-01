@@ -73,7 +73,10 @@ jobs:
         # `CREATE VIRTUAL TABLE … USING fts5(…)` — without the tag,
         # OpenCostStore() fails at runtime with "no such module: fts5"
         # and ~25 store/serve tests blow up.
-        run: go test -tags sqlite_fts5 ./...
+        # -race: Go's data-race detector. Gates the release on a clean
+        # dynamic-analysis pass per OpenSSF Best Practices
+        # `dynamic_analysis` / `dynamic_analysis_enable_assertions`.
+        run: go test -tags sqlite_fts5 -race ./...
 
       - name: Determine bump level
         id: level
@@ -118,6 +121,32 @@ jobs:
           VERSION: ${{ steps.version.outputs.next }}
           PREV: ${{ steps.version.outputs.latest }}
         run: |
+          # Build human-readable, categorised release notes by
+          # parsing Conventional Commit prefixes (feat:, fix:, etc.)
+          # rather than dumping raw `git log` output. This satisfies
+          # the OpenSSF Best Practices `release_notes` criterion,
+          # which requires a human-readable summary that is NOT the
+          # raw output of a version control log.
+          range_args=()
+          if [ "$PREV" != "v0.0.0" ]; then
+            range_args+=("$PREV"..HEAD)
+          fi
+          git log --no-merges --pretty=format:'%s|%h' "${range_args[@]}" > /tmp/commits.tsv
+
+          group_by_prefix() {
+            local heading="$1" prefix_re="$2"
+            local body
+            body=$(grep -E "^${prefix_re}(\\([^)]+\\))?(!)?:" /tmp/commits.tsv \
+              | sed -E 's/^[a-z]+(\([^)]+\))?(!)?:[[:space:]]*(.*)\|([0-9a-f]+)$/- \3 (\4)/' \
+              || true)
+            if [ -n "$body" ]; then
+              echo "### ${heading}"
+              echo
+              echo "$body"
+              echo
+            fi
+          }
+
           {
             echo "## Install"
             echo
@@ -144,12 +173,26 @@ jobs:
             echo
             echo "The \`ctm-${VERSION}-src.tar.gz\` archive is a vendored source tree (\`go mod vendor\` populated) that builds offline with \`go build .\`."
             echo
-            echo "## Changes"
+            echo "## What's changed"
             echo
-            if [ "$PREV" = "v0.0.0" ]; then
-              git log --pretty=format:'- %s (%h)' | head -n 200
-            else
-              git log --pretty=format:'- %s (%h)' "$PREV"..HEAD
+            group_by_prefix "Features"            "feat"
+            group_by_prefix "Bug fixes"           "fix"
+            group_by_prefix "Performance"         "perf"
+            group_by_prefix "Refactoring"         "refactor"
+            group_by_prefix "Documentation"       "docs"
+            group_by_prefix "Tests"               "test"
+            group_by_prefix "CI / build"          "(ci|build)"
+            group_by_prefix "Chores"              "chore"
+
+            # Anything that doesn't follow Conventional Commits ends
+            # up here so nothing gets dropped silently.
+            other=$(grep -vE '^[a-z]+(\([^)]+\))?(!)?:' /tmp/commits.tsv \
+              | sed -E 's/^(.*)\|([0-9a-f]+)$/- \1 (\2)/' || true)
+            if [ -n "$other" ]; then
+              echo "### Other"
+              echo
+              echo "$other"
+              echo
             fi
           } > release-notes.md
           echo "Generated notes:"
