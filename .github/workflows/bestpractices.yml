@@ -53,7 +53,6 @@ jobs:
             floss_license
             floss_license_osi
             license_location
-            documentation_basics
             documentation_interface
             sites_https
             discussion
@@ -152,9 +151,15 @@ jobs:
 
           # 4. unknown criterion keys (likely typos)
           known = set(criteria)
-          # tolerate a few additional metadata keys
-          meta = {"_comment", "name", "description", "homepage_url", "repo_url",
-                  "license", "homepage_url_status", "homepage_url_justification"}
+          # tolerate a few additional metadata keys. The non-criterion
+          # fields ($schema, project_id, level, badge_url,
+          # project_page_url, evidence, audit) mirror the schema used
+          # by other RandomCodeSpace projects on bestpractices.dev so
+          # the BadgeApp's auto-ingest reads our intent unambiguously.
+          meta = {"_comment", "$schema", "name", "description", "homepage_url",
+                  "repo_url", "license", "project_id", "level", "badge_url",
+                  "project_page_url", "evidence", "audit",
+                  "homepage_url_status", "homepage_url_justification"}
           for k in data:
               if k in meta:
                   continue
