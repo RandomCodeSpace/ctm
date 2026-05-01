@@ -422,23 +422,8 @@ func summariseHistoryInput(raw map[string]any, tool string) string {
 	if !ok {
 		return ""
 	}
-	get := func(k string) string {
-		if v, ok := in[k].(string); ok {
-			return v
-		}
-		return ""
-	}
-	switch tool {
-	case "Bash":
-		return truncateHistory(get("command"))
-	case "Edit", "Write", "Read", "MultiEdit", "NotebookEdit":
-		return truncateHistory(get("file_path"))
-	case "Glob", "Grep":
-		return truncateHistory(get("pattern"))
-	case "WebFetch":
-		return truncateHistory(get("url"))
-	case "Task":
-		return truncateHistory(get("description"))
+	if v, ok := truncateToolInputField(tool, in); ok {
+		return v
 	}
 	body, err := json.Marshal(in)
 	if err != nil {

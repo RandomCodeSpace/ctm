@@ -41,7 +41,10 @@ jobs:
           go-version-file: go.mod
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        # Pinned to commit SHA per supply-chain hygiene — third-party
+        # actions can be rewritten under a moving tag. Bump by re-running
+        # `gh api repos/pnpm/action-setup/git/refs/tags/v4`.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           # Pinned to ui/package.json packageManager so a bumped lockfile
           # doesn't desync from the toolchain CI runs the build with.
