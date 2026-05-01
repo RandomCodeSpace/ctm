@@ -26,3 +26,7 @@ docs/
 
 # Local code-intelligence cache (codeiq) — runtime DB + neo4j store, not source
 .codeiq/
+
+# Coverage reports (Go + vitest) — regenerated per-test, never committed
+coverage.out
+ui/coverage/
