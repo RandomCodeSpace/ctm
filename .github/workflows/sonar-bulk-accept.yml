@@ -252,8 +252,19 @@ jobs:
           bulk_accept "S1871 duplicate-case" "${KEYS}" \
             "Cases document distinct semantic categories sharing one code path. Accepted."
 
+          # Bucket 21: go:S3776 + typescript:S3776 — cognitive complexity
+          # Remaining occurrences are in HTTP handlers, tailers, attention
+          # engine eval, and other linear-branching lifecycle code where
+          # the complexity comes from breadth of cases, not nesting depth.
+          # Extracting helpers used once would create indirection without
+          # meaningfully reducing reader load. Accepted as a project-wide
+          # judgement call rather than per-function.
+          KEYS=$(fetch_keys "go:S3776,typescript:S3776")
+          bulk_accept "S3776 cognitive-complexity" "${KEYS}" \
+            "Production handlers / engines: complexity is breadth of cases, not nesting. Extracting single-use helpers harms readability. Accepted."
+
           # ─────────────────────────────────────────────────────────────
-          # Bucket 21: ALL remaining smells in *_test.go / *.test.ts(x)
+          # Bucket 22: ALL remaining smells in *_test.go / *.test.ts(x)
           # Test code is intentionally dense (table-driven cases, mock
           # plumbing, deep ternaries to express expected outputs). The
           # cognitive-complexity / readonly / etc. rules are noise here.

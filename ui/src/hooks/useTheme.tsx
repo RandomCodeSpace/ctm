@@ -35,7 +35,7 @@ function loadPref(): ThemePreference {
 
 function resolve(p: ThemePreference): ResolvedTheme {
   if (p !== "system") return p;
-  if (typeof globalThis.window === "undefined") return "dark";
+  if (globalThis.window === undefined) return "dark";
   return globalThis.matchMedia("(prefers-color-scheme: light)").matches
     ? "light"
     : "dark";
