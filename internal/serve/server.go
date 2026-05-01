@@ -365,9 +365,21 @@ func (s *Server) Run(ctx context.Context) error {
 	if home, err := os.UserHomeDir(); err == nil {
 		claudeProjectsRoot = filepath.Join(home, ".claude", "projects")
 	}
-	adopted := 0
+	// Each tmux session can accumulate many jsonls in s.logDir (one per
+	// claude conversation in that workdir over time). The tailer manager
+	// keys on session NAME, so calling Start() for the same name with
+	// different UUIDs replaces the prior tailer — meaning the last UUID
+	// iterated wins. os.ReadDir returns entries alphabetically, which
+	// means the order is unrelated to recency, so we'd often end up
+	// glued to a stale UUID while claude writes to a fresh one. Group
+	// log files by resolved session name and pick the freshest per name.
+	type tailCand struct {
+		uuid  string
+		mtime time.Time
+	}
+	freshest := make(map[string]tailCand) // session name → freshest log
+	orphanUUIDs := make([]string, 0)
 	adoptedViaWorkdir := 0
-	orphans := 0
 	if entries, err := os.ReadDir(s.logDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
@@ -388,22 +400,55 @@ func (s *Server) Run(ctx context.Context) error {
 				}
 			}
 			if !ok {
-				short := uuid
-				if len(short) > 8 {
-					short = short[:8]
-				}
-				name = "uuid:" + short
-				orphans++
+				orphanUUIDs = append(orphanUUIDs, uuid)
+				continue
 			}
-			s.tailers.Start(tailerCtx, name, uuid)
-			adopted++
+			info, infoErr := e.Info()
+			if infoErr != nil {
+				continue
+			}
+			cand := tailCand{uuid: uuid, mtime: info.ModTime()}
+			if existing, found := freshest[name]; !found || cand.mtime.After(existing.mtime) {
+				freshest[name] = cand
+			}
 		}
+	}
+	for name, cand := range freshest {
+		s.tailers.Start(tailerCtx, name, cand.uuid)
+	}
+	for _, uuid := range orphanUUIDs {
+		short := uuid
+		if len(short) > 8 {
+			short = short[:8]
+		}
+		s.tailers.Start(tailerCtx, "uuid:"+short, uuid)
 	}
 	slog.Info("ctm serve tailers started",
 		"sessions_in_projection", len(s.proj.All()),
-		"tailers_started", adopted,
+		"tailers_started", len(freshest)+len(orphanUUIDs),
 		"adopted_via_workdir", adoptedViaWorkdir,
-		"orphan_uuids", orphans)
+		"orphan_uuids", len(orphanUUIDs))
+
+	// Periodic rescan: claude rotates to a new UUID jsonl whenever a new
+	// conversation starts inside an existing tmux session, but the tailer
+	// manager only reads the projection at startup. Without this loop,
+	// the daemon stays glued to the previous UUID's file (which claude
+	// no longer writes to) and the UI shows stale activity. Re-running
+	// the freshest-per-name selection every 30s and calling Start() —
+	// which is a no-op when the UUID hasn't changed — keeps tailers in
+	// sync with whatever conversation claude is writing to right now.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-tailerCtx.Done():
+				return
+			case <-ticker.C:
+				s.rescanTailers(tailerCtx, claudeProjectsRoot)
+			}
+		}
+	}()
 
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- s.http.Serve(s.listener) }()
@@ -464,6 +509,65 @@ func (s *Server) Run(ctx context.Context) error {
 			return nil
 		}
 		return err
+	}
+}
+
+// rescanTailers re-runs the freshest-per-name adoption pass against
+// s.logDir, calling Start() for each mapped session. TailerManager.Start
+// is idempotent when the UUID hasn't changed and rotates cleanly when
+// it has, so calling it on every tick is safe even if nothing's moved.
+// Orphan UUIDs are not (re-)registered here — they only get tailers at
+// startup; a new claude conversation's UUID becomes mappable as soon as
+// the projection picks up the session_new hook event.
+func (s *Server) rescanTailers(ctx context.Context, claudeProjectsRoot string) {
+	all := s.proj.All()
+	uuidToName := make(map[string]string, len(all))
+	claudeDirToName := make(map[string]string, len(all))
+	for _, sess := range all {
+		if sess.UUID != "" {
+			uuidToName[sess.UUID] = sess.Name
+		}
+		if sess.Workdir != "" {
+			claudeDirToName[strings.ReplaceAll(sess.Workdir, "/", "-")] = sess.Name
+		}
+	}
+	type tailCand struct {
+		uuid  string
+		mtime time.Time
+	}
+	freshest := make(map[string]tailCand)
+	entries, err := os.ReadDir(s.logDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
+		}
+		uuid := strings.TrimSuffix(e.Name(), ".jsonl")
+		name, ok := uuidToName[uuid]
+		if !ok && claudeProjectsRoot != "" {
+			if matches, _ := filepath.Glob(filepath.Join(claudeProjectsRoot, "*", uuid+".jsonl")); len(matches) == 1 {
+				if mapped, ok2 := claudeDirToName[filepath.Base(filepath.Dir(matches[0]))]; ok2 {
+					name = mapped
+					ok = true
+				}
+			}
+		}
+		if !ok {
+			continue
+		}
+		info, infoErr := e.Info()
+		if infoErr != nil {
+			continue
+		}
+		cand := tailCand{uuid: uuid, mtime: info.ModTime()}
+		if existing, found := freshest[name]; !found || cand.mtime.After(existing.mtime) {
+			freshest[name] = cand
+		}
+	}
+	for name, cand := range freshest {
+		s.tailers.Start(ctx, name, cand.uuid)
 	}
 }
 
