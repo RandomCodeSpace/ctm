@@ -45,7 +45,10 @@ jobs:
           go-version-file: go.mod
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        # Pinned to commit SHA (v4) per supply-chain hygiene — third-party
+        # actions can be rewritten under a moving tag. Bump by re-running
+        # `gh api repos/pnpm/action-setup/git/refs/tags/v4`.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.33.0
 
@@ -70,7 +73,12 @@ jobs:
             ./...
 
       - name: UI install
-        run: pnpm -C ui install --frozen-lockfile
+        # --ignore-scripts: refuse to execute lifecycle scripts from
+        # transitive deps (Sonar S6505). vitest + the React stack don't
+        # require any postinstall; esbuild ships per-platform binaries
+        # via optional deps. If a future dep needs a build step, add it
+        # to `pnpm.onlyBuiltDependencies` in ui/package.json instead.
+        run: pnpm -C ui install --frozen-lockfile --ignore-scripts
 
       - name: UI test with coverage
         run: pnpm -C ui exec vitest run --coverage
@@ -89,6 +97,9 @@ jobs:
 
       - name: SonarCloud Scan
         if: steps.token.outputs.present == 'true'
-        uses: SonarSource/sonarqube-scan-action@v5
+        # v6 — v5 emits a deprecation/security warning on every run.
+        # Pinned to commit SHA per supply-chain hygiene. Bump by
+        # re-running `gh api repos/SonarSource/sonarqube-scan-action/git/refs/tags/v6`.
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
