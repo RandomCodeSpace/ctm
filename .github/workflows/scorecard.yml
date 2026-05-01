@@ -1,0 +1,75 @@
+name: OpenSSF Scorecard
+
+# Runs the OpenSSF Scorecard supply-chain check on every push to main
+# and weekly. Results are uploaded to GitHub's code-scanning surface
+# (visible at /security/code-scanning) AND published to the public
+# Scorecard registry at api.scorecard.dev so the README badge shows
+# the live score.
+#
+# Required repo settings:
+# - Settings → Actions → General → Workflow permissions: at least
+#   "Read repository contents and packages permissions" (default).
+# - Settings → Code security → Code scanning: enabled (so SARIF
+#   uploads land somewhere).
+# - The workflow grants `id-token: write` so the action can mint an
+#   OIDC token signed by GitHub and use it as proof-of-identity when
+#   pushing results to the Scorecard API. No long-lived secret needed.
+
+on:
+  branch_protection_rule:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly so the score reflects security-relevant changes (new
+    # deps, new releases, branch-protection edits) even when there's
+    # no push for a few days. Tuesdays 03:00 UTC keeps it off the
+    # busy weekday-morning window.
+    - cron: "0 3 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for upload-sarif → /security/code-scanning.
+      security-events: write
+      # Required for OIDC publish_results=true → api.scorecard.dev.
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        # actions/checkout@v4 = b4ffde65f46336ab88eb53be808477a3936bae11
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        # ossf/scorecard-action@v2.4.3
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # publish_results=true sends the score to the public registry
+          # so the README badge resolves. It is also a public-good
+          # contribution — anyone evaluating ctm's supply-chain posture
+          # can read the breakdown without re-running the tool.
+          publish_results: true
+
+      - name: Upload artifact
+        # actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        # github/codeql-action/upload-sarif@v4.35.2
+        uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225
+        with:
+          sarif_file: results.sarif

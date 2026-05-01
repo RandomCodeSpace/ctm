@@ -7,7 +7,29 @@
   <a href="https://goreportcard.com/report/github.com/RandomCodeSpace/ctm"><img src="https://goreportcard.com/badge/github.com/RandomCodeSpace/ctm" alt="Go Report Card"></a>
   <img src="https://img.shields.io/github/go-mod/go-version/RandomCodeSpace/ctm?color=00ADD8&label=go" alt="Go version">
   <a href="https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/RandomCodeSpace/ctm"><img src="https://api.scorecard.dev/projects/github.com/RandomCodeSpace/ctm/badge" alt="OpenSSF Scorecard"></a>
 </p>
+
+<!--
+OpenSSF Best Practices badge — one-time setup, then add the markup
+back into the badge row above:
+
+  1. Sign in with GitHub at https://www.bestpractices.dev/en/projects/new
+  2. Submit the project; the form assigns a numeric PROJECT_ID and
+     opens the criteria checklist (passing / silver / gold tiers).
+  3. Add the following to the <p align="center"> block above (replace
+     PROJECT_ID with the assigned number):
+
+        <a href="https://www.bestpractices.dev/projects/PROJECT_ID">
+          <img src="https://www.bestpractices.dev/projects/PROJECT_ID/badge"
+               alt="OpenSSF Best Practices">
+        </a>
+
+The badge auto-updates as criteria are checked off — no CI integration
+required (unlike the Scorecard badge, which is updated by the
+.github/workflows/scorecard.yml workflow on every push to main).
+-->
+
 
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
