@@ -23,3 +23,6 @@ docs/
 
 # Subagent worktree scratch paths (managed by the harness, not source)
 .claude/worktrees/
+
+# Local code-intelligence cache (codeiq) — runtime DB + neo4j store, not source
+.codeiq/
