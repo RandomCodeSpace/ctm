@@ -190,7 +190,7 @@ type FeedFilter = "all" | "bash";
 const FEED_FILTER_STORAGE_PREFIX = "ctm.feed.filter.";
 
 function readStoredFilter(sessionName: string): FeedFilter {
-  if (typeof globalThis.window === "undefined") return "all";
+  if (globalThis.window === undefined) return "all";
   try {
     const v = globalThis.sessionStorage.getItem(
       FEED_FILTER_STORAGE_PREFIX + sessionName,
@@ -219,7 +219,7 @@ function FeedTab({ sessionName }: { sessionName: string }) {
   }, [sessionName]);
 
   useEffect(() => {
-    if (typeof globalThis.window === "undefined") return;
+    if (globalThis.window === undefined) return;
     try {
       globalThis.sessionStorage.setItem(
         FEED_FILTER_STORAGE_PREFIX + sessionName,
