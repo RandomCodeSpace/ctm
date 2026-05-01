@@ -344,23 +344,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// rather than silently dropping it.
 	tailerCtx, tailerCancel := context.WithCancel(ctx)
 	defer tailerCancel()
-	uuidToName := make(map[string]string, len(s.proj.All()))
-	// claudeDirToName maps Claude's project-directory naming convention
-	// (`/home/dev/projects/ctm` → `-home-dev-projects-ctm`) back to a
-	// session name, so orphan UUIDs from previous claude sessions that
-	// ran in the same workdir still get routed to the right session's
-	// ring. Without this, each new claude session for the same tmux
-	// session starts a fresh UUID whose prior transcripts disappear
-	// into `uuid:<short>` rings the UI never surfaces.
-	claudeDirToName := make(map[string]string, len(s.proj.All()))
-	for _, sess := range s.proj.All() {
-		if sess.UUID != "" {
-			uuidToName[sess.UUID] = sess.Name
-		}
-		if sess.Workdir != "" {
-			claudeDirToName[strings.ReplaceAll(sess.Workdir, "/", "-")] = sess.Name
-		}
-	}
+	uuidToName, claudeDirToName := buildSessionMaps(s.proj.All())
 	claudeProjectsRoot := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		claudeProjectsRoot = filepath.Join(home, ".claude", "projects")
@@ -386,22 +370,13 @@ func (s *Server) Run(ctx context.Context) error {
 				continue
 			}
 			uuid := strings.TrimSuffix(e.Name(), ".jsonl")
-			name, ok := uuidToName[uuid]
-			if !ok && claudeProjectsRoot != "" {
-				// Fall back: walk `~/.claude/projects/*/` for a
-				// transcript with this UUID; its parent directory
-				// name encodes the workdir.
-				if matches, _ := filepath.Glob(filepath.Join(claudeProjectsRoot, "*", uuid+".jsonl")); len(matches) == 1 {
-					if mapped, ok2 := claudeDirToName[filepath.Base(filepath.Dir(matches[0]))]; ok2 {
-						name = mapped
-						ok = true
-						adoptedViaWorkdir++
-					}
-				}
-			}
+			name, viaFallback, ok := resolveLogUUIDToName(uuid, uuidToName, claudeDirToName, claudeProjectsRoot)
 			if !ok {
 				orphanUUIDs = append(orphanUUIDs, uuid)
 				continue
+			}
+			if viaFallback {
+				adoptedViaWorkdir++
 			}
 			info, infoErr := e.Info()
 			if infoErr != nil {
@@ -520,17 +495,7 @@ func (s *Server) Run(ctx context.Context) error {
 // startup; a new claude conversation's UUID becomes mappable as soon as
 // the projection picks up the session_new hook event.
 func (s *Server) rescanTailers(ctx context.Context, claudeProjectsRoot string) {
-	all := s.proj.All()
-	uuidToName := make(map[string]string, len(all))
-	claudeDirToName := make(map[string]string, len(all))
-	for _, sess := range all {
-		if sess.UUID != "" {
-			uuidToName[sess.UUID] = sess.Name
-		}
-		if sess.Workdir != "" {
-			claudeDirToName[strings.ReplaceAll(sess.Workdir, "/", "-")] = sess.Name
-		}
-	}
+	uuidToName, claudeDirToName := buildSessionMaps(s.proj.All())
 	type tailCand struct {
 		uuid  string
 		mtime time.Time
@@ -545,15 +510,7 @@ func (s *Server) rescanTailers(ctx context.Context, claudeProjectsRoot string) {
 			continue
 		}
 		uuid := strings.TrimSuffix(e.Name(), ".jsonl")
-		name, ok := uuidToName[uuid]
-		if !ok && claudeProjectsRoot != "" {
-			if matches, _ := filepath.Glob(filepath.Join(claudeProjectsRoot, "*", uuid+".jsonl")); len(matches) == 1 {
-				if mapped, ok2 := claudeDirToName[filepath.Base(filepath.Dir(matches[0]))]; ok2 {
-					name = mapped
-					ok = true
-				}
-			}
-		}
+		name, _, ok := resolveLogUUIDToName(uuid, uuidToName, claudeDirToName, claudeProjectsRoot)
 		if !ok {
 			continue
 		}
@@ -569,6 +526,59 @@ func (s *Server) rescanTailers(ctx context.Context, claudeProjectsRoot string) {
 	for name, cand := range freshest {
 		s.tailers.Start(ctx, name, cand.uuid)
 	}
+}
+
+// buildSessionMaps walks a sessions snapshot and returns:
+//   - uuidToName: claude session_id (UUID) → session.Name
+//   - claudeDirToName: Claude's projects-directory encoding of the
+//     workdir (`/home/dev/projects/ctm` → `-home-dev-projects-ctm`) →
+//     session.Name. Used as a fallback so orphan UUIDs from prior claude
+//     sessions in the same workdir still get routed to the right ring.
+//
+// Both maps are pre-sized from the input slice. Sessions with empty
+// UUID or empty Workdir are skipped from the corresponding map.
+func buildSessionMaps(sessions []session.Session) (uuidToName, claudeDirToName map[string]string) {
+	uuidToName = make(map[string]string, len(sessions))
+	claudeDirToName = make(map[string]string, len(sessions))
+	for _, sess := range sessions {
+		if sess.UUID != "" {
+			uuidToName[sess.UUID] = sess.Name
+		}
+		if sess.Workdir != "" {
+			claudeDirToName[strings.ReplaceAll(sess.Workdir, "/", "-")] = sess.Name
+		}
+	}
+	return uuidToName, claudeDirToName
+}
+
+// resolveLogUUIDToName maps a JSONL log file's UUID (filename minus
+// .jsonl) to a managed session.Name. Lookup order:
+//
+//  1. Direct match in uuidToName.
+//  2. Fallback: glob `~/.claude/projects/*/<uuid>.jsonl` (parameterised
+//     via claudeProjectsRoot for testability) — if exactly one match
+//     exists, the parent directory name is looked up in claudeDirToName.
+//
+// viaFallback reports whether the resolution required the
+// claude-projects fallback (used by Server.Run to count
+// `adopted_via_workdir` for the structured boot log). When ok is false
+// the caller treats the UUID as orphan.
+func resolveLogUUIDToName(uuid string, uuidToName, claudeDirToName map[string]string, claudeProjectsRoot string) (name string, viaFallback bool, ok bool) {
+	if name, found := uuidToName[uuid]; found {
+		return name, false, true
+	}
+	if claudeProjectsRoot == "" {
+		return "", false, false
+	}
+	matches, _ := filepath.Glob(filepath.Join(claudeProjectsRoot, "*", uuid+".jsonl"))
+	if len(matches) != 1 {
+		return "", false, false
+	}
+	mapped, found := claudeDirToName[filepath.Base(filepath.Dir(matches[0]))]
+	if !found {
+		return "", false, false
+	}
+	return mapped, true, true
 }
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
