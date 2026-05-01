@@ -1,0 +1,94 @@
+# SonarCloud quality gate + coverage upload.
+#
+# Triggers: push to main (full-history scan) and PRs (incremental scan
+# against the base branch). Concurrency-gated per-ref so reruns cancel
+# in-flight scans.
+#
+# Coverage is collected fresh in this workflow rather than reused from
+# CI — Sonar needs both go-coverprofile and lcov in the same workspace
+# pass, and the existing CI job runs `go test` without -coverprofile.
+# Adding coverage there would slow every PR build; keeping it here
+# isolates the cost to the Sonar job.
+
+name: SonarCloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: sonar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Sonar uses git blame for new-code detection — shallow
+          # checkouts (default fetch-depth=1) attribute every line to
+          # the latest commit, breaking the quality-gate "new code"
+          # signal. fetch-depth: 0 grabs the full history.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Build UI bundle
+        # Required before any Go test run: //go:embed all:dist in
+        # internal/serve/assets.go errors out if internal/serve/dist/
+        # is empty. Same as ci.yml.
+        run: make ui
+
+      - name: Go test with coverage
+        run: |
+          go test -tags sqlite_fts5 \
+            -coverprofile=coverage.out \
+            -covermode=atomic \
+            ./...
+
+      - name: UI install
+        run: pnpm -C ui install --frozen-lockfile
+
+      - name: UI test with coverage
+        run: pnpm -C ui exec vitest run --coverage
+
+      - name: Detect SONAR_TOKEN
+        id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SONAR_TOKEN secret is not set; skipping SonarCloud scan. Add the token in repo Settings → Secrets and variables → Actions."
+          fi
+
+      - name: SonarCloud Scan
+        if: steps.token.outputs.present == 'true'
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
