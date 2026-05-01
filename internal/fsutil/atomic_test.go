@@ -70,6 +70,53 @@ func TestAtomicWriteFile_FailsWhenDirMissing(t *testing.T) {
 	}
 }
 
+func TestAtomicWriteFile_RenameOntoDirectoryFails(t *testing.T) {
+	// rename(2) refuses to replace a non-empty directory with a regular
+	// file (EISDIR / ENOTDIR). Pre-create a directory at the target path
+	// so the temp-file write/chmod/close all succeed but Rename returns
+	// an error — exercises the final error branch.
+	dir := t.TempDir()
+	target := filepath.Join(dir, "is-a-dir")
+	if err := os.MkdirAll(filepath.Join(target, "child"), 0o755); err != nil {
+		t.Fatalf("seed dir: %v", err)
+	}
+
+	err := AtomicWriteFile(target, []byte("payload"), 0o644)
+	if err == nil {
+		t.Fatalf("expected rename error when target is a non-empty directory, got nil")
+	}
+
+	// And the directory must still exist untouched.
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("Stat after failed rename: %v", err)
+	}
+	if !info.IsDir() {
+		t.Errorf("expected target to remain a directory")
+	}
+}
+
+func TestAtomicWriteFile_PermissionsPropagated(t *testing.T) {
+	// Goes beyond TestAtomicWriteFile_OverwritesExisting by sweeping a
+	// few common modes — ensures the explicit Chmod call to override the
+	// default 0600 from os.CreateTemp covers each.
+	cases := []os.FileMode{0o600, 0o640, 0o644, 0o664, 0o755}
+	dir := t.TempDir()
+	for _, perm := range cases {
+		path := filepath.Join(dir, perm.String()+".txt")
+		if err := AtomicWriteFile(path, []byte("x"), perm); err != nil {
+			t.Fatalf("AtomicWriteFile(perm=%v): %v", perm, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if got := info.Mode().Perm(); got != perm {
+			t.Errorf("perm = %v, want %v", got, perm)
+		}
+	}
+}
+
 func TestAtomicWriteFile_NoTempFileLeftBehind(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "real.txt")
