@@ -85,10 +85,17 @@ func statuslineHookCommand() string { return ctmSubcommand("statusline") }
 // Both hook commands are resolved to the ctm binary at write time so they
 // keep working even if PATH changes.
 //
-// Note: env vars like CLAUDE_CODE_NO_FLICKER cannot go here — claude reads
-// them too early in startup for settings.json's env key to take effect.
-// They live in ~/.config/ctm/env.sh (see sampleEnvFile) and are sourced
-// by the shell before claude launches.
+// `tui`, `viewMode`, and `remoteControlAtStartup` live here (not in
+// ~/.claude/settings.json or ~/.claude.json) so ctm never mutates any
+// Claude-owned config file on disk. The overlay is merged on top of
+// settings.json only when claude is launched via ctm — direct `claude`
+// invocations are completely unaffected by ctm's defaults.
+//
+// Note: env vars like CLAUDE_CODE_NO_FLICKER cannot go here — claude
+// reads them too early in startup for settings.json's env key to take
+// effect. They live in ~/.config/ctm/claude-env.json (see
+// sampleClaudeEnvJSON) and are exported by the shell before claude
+// launches via config.ClaudeEnvExports().
 func buildSampleOverlay(statuslineCmd, logHookCmd string) string {
 	return fmt.Sprintf(`{
   "reduceMotion": false,
@@ -98,6 +105,9 @@ func buildSampleOverlay(statuslineCmd, logHookCmd string) string {
     "command": %q
   },
   "theme": "dark",
+  "tui": "fullscreen",
+  "viewMode": "focus",
+  "remoteControlAtStartup": true,
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
@@ -118,42 +128,48 @@ func buildSampleOverlay(statuslineCmd, logHookCmd string) string {
 `, statuslineCmd, logHookCmd)
 }
 
-// sampleEnvFile is the bash env script sourced by the tmux shell before
-// claude launches. Use this for env vars that claude reads DURING CLI
-// startup, which are too early for settings.json's env key to affect.
-// Most env vars (including CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS) can
-// go in claude-overlay.json's env block instead and should — settings
-// is the canonical home per Claude Code's docs.
-const sampleEnvFile = `# ctm-managed env file — sourced by the shell that spawns claude.
-# Only affects claude processes launched via ctm. Direct 'claude' calls
-# outside ctm are unaffected (this file is never sourced then).
-#
-# Use this file only for env vars that claude reads too early in
-# startup for settings.json's "env" block to take effect. For anything
-# else, prefer the overlay at ~/.config/ctm/claude-overlay.json.
+// sampleClaudeEnvJSON is the JSON env file ctm reads at every claude
+// launch and exports into the shell BEFORE exec'ing claude. Use this
+// for env vars claude reads during CLI startup, which is too early for
+// the overlay's `env` block to take effect. Most env vars (including
+// CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS) belong in claude-overlay.json's
+// `env` block instead and should be put there.
+//
+// Pre-seeded with the two ctm-default vars:
+//   - CLAUDE_CODE_NO_FLICKER: flicker-free streaming markdown rendering
+//   - CTM_STATUSLINE_DUMP:    where `ctm statusline` writes per-session
+//                             quota dumps; `{uuid}` is substituted by
+//                             the statusline subcommand at render time.
+const sampleClaudeEnvJSON = `{
+  "_comment": "ctm-managed env vars exported into the shell that spawns claude. Only affects claude processes launched via ctm; direct 'claude' calls outside ctm are unaffected. Use this for vars claude reads too early in startup for claude-overlay.json's 'env' block to take effect. For anything else, prefer the overlay's 'env' block.",
+  "env": {
+    "CLAUDE_CODE_NO_FLICKER": "1",
+    "CTM_STATUSLINE_DUMP": "/tmp/ctm-statusline/{uuid}.json"
+  }
+}
 `
 
-// writeEnvFile writes the default env.sh to path, creating parent dirs.
-// Uses O_EXCL so parallel invocations don't clobber each other, and leaves
-// an existing env file untouched (so user edits survive).
-func writeEnvFile(path string) error {
+// writeClaudeEnv writes the default claude-env.json to path, creating
+// parent dirs. Uses O_EXCL so parallel invocations don't clobber each
+// other, and leaves an existing file untouched (so user edits survive).
+func writeClaudeEnv(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf(errCreatingConfigDirFmt, err)
 	}
-	// 0600: env.sh is sourced by the shell that spawns claude and is a
-	// natural place for users to park secrets (API keys, tokens). Default
-	// to owner-only so a user who drops a secret in doesn't leak it to
-	// other users on a shared host.
+	// 0600: claude-env.json is exported by the shell that spawns claude
+	// and is a natural place for users to park secrets (API keys,
+	// tokens). Default to owner-only so a user who drops a secret in
+	// doesn't leak it to other users on a shared host.
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		if os.IsExist(err) {
 			return nil // keep user edits intact
 		}
-		return fmt.Errorf("creating env file: %w", err)
+		return fmt.Errorf("creating claude-env.json: %w", err)
 	}
 	defer f.Close()
-	if _, err := f.WriteString(sampleEnvFile); err != nil {
-		return fmt.Errorf("writing env file: %w", err)
+	if _, err := f.WriteString(sampleClaudeEnvJSON); err != nil {
+		return fmt.Errorf("writing claude-env.json: %w", err)
 	}
 	return nil
 }
@@ -165,7 +181,7 @@ func runOverlayStatus(cmd *cobra.Command, args []string) error {
 		out.Success("overlay active: %s", path)
 		out.Dim(dimStatusLineFmt, statuslineHookCommand())
 		out.Dim("PostToolUse: %s", logToolUseHookCommand())
-		envPath := config.EnvFilePath()
+		envPath := config.ClaudeEnvPath()
 		if _, err := os.Stat(envPath); err == nil {
 			out.Dim(dimEnvFileFmt, envPath)
 		}
@@ -179,14 +195,14 @@ func runOverlayStatus(cmd *cobra.Command, args []string) error {
 func runOverlayInit(cmd *cobra.Command, args []string) error {
 	out := output.Stdout()
 	path := config.ClaudeOverlayPath()
-	envPath := config.EnvFilePath()
+	envPath := config.ClaudeEnvPath()
 	slCmd := statuslineHookCommand()
 	logCmd := logToolUseHookCommand()
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf(errCreatingConfigDirFmt, err)
 	}
-	if err := writeEnvFile(envPath); err != nil {
+	if err := writeClaudeEnv(envPath); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(sessionLogDir(), 0755); err != nil {
@@ -222,7 +238,7 @@ func runOverlayInit(cmd *cobra.Command, args []string) error {
 func runOverlayEdit(cmd *cobra.Command, args []string) error {
 	out := output.Stdout()
 	path := config.ClaudeOverlayPath()
-	envPath := config.EnvFilePath()
+	envPath := config.ClaudeEnvPath()
 	slCmd := statuslineHookCommand()
 	logCmd := logToolUseHookCommand()
 
@@ -242,7 +258,7 @@ func runOverlayEdit(cmd *cobra.Command, args []string) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return fmt.Errorf(errCreatingConfigDirFmt, err)
 		}
-		if err := writeEnvFile(envPath); err != nil {
+		if err := writeClaudeEnv(envPath); err != nil {
 			return err
 		}
 		_ = os.MkdirAll(sessionLogDir(), 0755)

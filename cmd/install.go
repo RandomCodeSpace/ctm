@@ -90,23 +90,12 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 6. Claude-side defaults (idempotent, conservative).
-	//
-	// These mirror ensureSetup()'s claude-side bootstrap so `ctm install`
-	// is a full explicit setup, not just a partial one. Each helper is
-	// strictly no-op when the relevant key is absent or explicitly
-	// "default"; any other user value is respected. See
-	// internal/claude.{EnsureRemoteControlAtStartup,EnsureTUIFullscreen,
-	// EnsureViewModeFocus} for the per-key contracts.
-	if err := ensureClaudeRemoteControlDefault(); err == nil {
-		out.Success("Claude remote control: default on (~/.claude.json)")
-	}
-	if err := ensureClaudeTUIFullscreenDefault(); err == nil {
-		out.Success("Claude TUI: fullscreen (~/.claude/settings.json)")
-	}
-	if err := ensureClaudeViewModeFocusDefault(); err == nil {
-		out.Success("Claude viewMode: focus (~/.claude/settings.json)")
-	}
+	// 6. Claude-side defaults are now expressed entirely in
+	// ~/.config/ctm/claude-overlay.json (created by step 6 of ensureSetup
+	// via writeOverlayFile). ctm never mutates ~/.claude.json or
+	// ~/.claude/settings.json — the overlay is merged in via
+	// `claude --settings` only when claude is launched through ctm,
+	// leaving direct `claude` invocations completely unaffected.
 
 	// 7. Print summary
 	fmt.Println()

@@ -242,13 +242,17 @@ func ClaudeOverlayPath() string {
 	return filepath.Join(Dir(), "claude-overlay.json")
 }
 
-// EnvFilePath returns the path to the optional ctm-managed env file.
-// When this file exists, ctm sources it in the shell before spawning claude.
-// Use this for env vars that must exist as real shell environment (e.g.
-// CLAUDE_CODE_NO_FLICKER) rather than inside claude's settings.json env key,
-// which is evaluated too late in claude's startup.
-func EnvFilePath() string {
-	return filepath.Join(Dir(), "env.sh")
+// ClaudeEnvPath returns the path to the ctm-managed JSON env file.
+// When this file exists, ctm reads it at every claude-launching command
+// and exports its `env` block into the shell BEFORE exec'ing claude.
+// Use this for env vars claude reads too early in startup for the
+// overlay's `env` block to apply (e.g., CLAUDE_CODE_NO_FLICKER).
+//
+// Replaces the older bash-script env.sh — JSON keeps the format
+// consistent with the rest of ctm's user config (config.json,
+// sessions.json, claude-overlay.json, .bestpractices.json).
+func ClaudeEnvPath() string {
+	return filepath.Join(Dir(), "claude-env.json")
 }
 
 // Load reads Config from path. If the file does not exist it creates it

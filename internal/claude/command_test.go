@@ -79,41 +79,36 @@ func TestBuildCommandWithOverlayPathContainsSpaces(t *testing.T) {
 	}
 }
 
-func TestBuildCommandWithEnvFile(t *testing.T) {
-	cmd := BuildCommand("abc-123", "safe", false, "", "/home/u/.config/ctm/env.sh")
-	// Env file prefix: TOCTOU-safe source via `[ -r path ] && . path`
-	expectedPrefix := "{ [ -r '/home/u/.config/ctm/env.sh' ] && . '/home/u/.config/ctm/env.sh'; }; "
+func TestBuildCommandWithEnvExports(t *testing.T) {
+	cmd := BuildCommand("abc-123", "safe", false, "", `export CLAUDE_CODE_NO_FLICKER='1'`)
+	// Env exports are prepended verbatim, then "; " then the core.
+	expectedPrefix := `export CLAUDE_CODE_NO_FLICKER='1'; `
 	if !strings.HasPrefix(cmd, expectedPrefix) {
-		t.Errorf("expected env source prefix, got: %s", cmd)
+		t.Errorf("expected env-exports prefix, got: %s", cmd)
 	}
 	if !strings.Contains(cmd, "claude --session-id abc-123") {
-		t.Errorf("expected claude invocation after env source, got: %s", cmd)
+		t.Errorf("expected claude invocation after env exports, got: %s", cmd)
 	}
 }
 
-func TestBuildCommandWithEnvFileAndOverlay(t *testing.T) {
-	cmd := BuildCommand("abc-123", "yolo", true, "/o.json", "/e.sh")
-	// Env prefix appears first
-	if !strings.HasPrefix(cmd, "{ [ -r '/e.sh' ] && . '/e.sh'; }; if [ -r '/o.json' ]; then ") {
-		t.Errorf("expected env then overlay-if prefix, got: %s", cmd)
+func TestBuildCommandWithEnvExportsAndOverlay(t *testing.T) {
+	cmd := BuildCommand("abc-123", "yolo", true, "/o.json", `export X='1' Y='2'`)
+	// Env prefix appears first.
+	if !strings.HasPrefix(cmd, `export X='1' Y='2'; if [ -r '/o.json' ]; then `) {
+		t.Errorf("expected exports then overlay-if prefix, got: %s", cmd)
 	}
-	// Overlay settings appear inside the then-branch
 	if !strings.Contains(cmd, "--settings '/o.json'") {
 		t.Errorf("expected --settings flag, got: %s", cmd)
 	}
-	// Yolo flag preserved
 	if !strings.Contains(cmd, "--dangerously-skip-permissions") {
 		t.Errorf("expected yolo flag, got: %s", cmd)
 	}
 }
 
-func TestBuildCommandWithEnvFilePathContainsSpaces(t *testing.T) {
-	cmd := BuildCommand("abc-123", "safe", false, "", "/home/My User/.config/ctm/env.sh")
-	if !strings.Contains(cmd, "[ -r '/home/My User/.config/ctm/env.sh' ]") {
-		t.Errorf("env path with spaces lost quoting in test: %s", cmd)
-	}
-	if !strings.Contains(cmd, ". '/home/My User/.config/ctm/env.sh'") {
-		t.Errorf("env path with spaces lost quoting in source: %s", cmd)
+func TestBuildCommandEmptyEnvExportsHasNoPrefix(t *testing.T) {
+	cmd := BuildCommand("abc-123", "safe", false, "", "")
+	if strings.HasPrefix(cmd, "export ") {
+		t.Errorf("empty envExports should produce no prefix, got: %s", cmd)
 	}
 }
 
@@ -159,28 +154,3 @@ func TestOverlayPathIfExists(t *testing.T) {
 	})
 }
 
-func TestEnvFilePathIfExists(t *testing.T) {
-	dir := t.TempDir()
-
-	t.Run("empty path returns empty", func(t *testing.T) {
-		if got := EnvFilePathIfExists(""); got != "" {
-			t.Errorf("got %q, want empty", got)
-		}
-	})
-
-	t.Run("missing file returns empty", func(t *testing.T) {
-		if got := EnvFilePathIfExists(filepath.Join(dir, "nope.sh")); got != "" {
-			t.Errorf("got %q, want empty", got)
-		}
-	})
-
-	t.Run("existing file returns path", func(t *testing.T) {
-		path := filepath.Join(dir, "env.sh")
-		if err := os.WriteFile(path, []byte("export FOO=bar"), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if got := EnvFilePathIfExists(path); got != path {
-			t.Errorf("got %q, want %q", got, path)
-		}
-	})
-}

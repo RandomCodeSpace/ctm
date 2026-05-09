@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/RandomCodeSpace/ctm/internal/claude"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/logrotate"
 	"github.com/RandomCodeSpace/ctm/internal/migrate"
@@ -24,7 +23,7 @@ import (
 //   - creates ~/.config/ctm/ if missing
 //   - writes config.json with defaults if missing
 //   - regenerates tmux.conf on every call so new defaults reach upgraded users
-//   - writes claude-overlay.json + env.sh + logs/ dir if missing
+//   - writes claude-overlay.json + claude-env.json + logs/ dir if missing
 //   - injects shell aliases into ~/.bashrc and ~/.zshrc if markers not present
 func ensureSetup() (*config.Config, error) {
 	if err := os.MkdirAll(config.Dir(), 0755); err != nil {
@@ -45,9 +44,6 @@ func ensureSetup() (*config.Config, error) {
 	}
 	_ = ensureOverlaySidecars()
 	_ = ensureAliases()
-	_ = ensureClaudeRemoteControlDefault()
-	_ = ensureClaudeTUIFullscreenDefault()
-	_ = ensureClaudeViewModeFocusDefault()
 	_ = pruneSessionLogs(cfg)
 	return &cfg, nil
 }
@@ -100,55 +96,12 @@ func runStateMigrations() error {
 	return nil
 }
 
-// ensureClaudeRemoteControlDefault opts new Claude Code installs into Remote
-// Control by default. Never creates ~/.claude.json, never overwrites an
-// explicit user choice (true or false) — only fills in the key when it is
-// absent. See internal/claude.EnsureRemoteControlAtStartup for the full
-// contract. Errors are swallowed; this is convenience, not correctness.
-func ensureClaudeRemoteControlDefault() error {
-	path, err := claude.ClaudeJSONPath()
-	if err != nil {
-		return err
-	}
-	return claude.EnsureRemoteControlAtStartup(path)
-}
-
-// ensureClaudeTUIFullscreenDefault pins Claude Code's TUI renderer to
-// "fullscreen" in ~/.claude/settings.json when the key is absent or set to
-// "default". Any other explicit value (e.g., "compact") is treated as a
-// deliberate user choice and left alone. See
-// internal/claude.EnsureTUIFullscreen for the full contract.
-func ensureClaudeTUIFullscreenDefault() error {
-	path, err := claude.SettingsJSONPath()
-	if err != nil {
-		return err
-	}
-	return claude.EnsureTUIFullscreen(path)
-}
-
-// ensureClaudeViewModeFocusDefault pins Claude Code's default transcript
-// view mode to "focus" in ~/.claude/settings.json when the key is absent
-// or set to "default". Any other explicit value ("verbose" or a future
-// mode) is treated as a deliberate user choice and left alone. See
-// internal/claude.EnsureViewModeFocus for the full contract.
-//
-// Pairs with ensureClaudeTUIFullscreenDefault — focus view only renders
-// under the fullscreen TUI, so we set both together to land on the
-// mobile-first default ctm is optimised for.
-func ensureClaudeViewModeFocusDefault() error {
-	path, err := claude.SettingsJSONPath()
-	if err != nil {
-		return err
-	}
-	return claude.EnsureViewModeFocus(path)
-}
-
-// ensureOverlaySidecars writes claude-overlay.json, env.sh, and the
-// per-session logs dir if any are missing. Leaves existing files alone —
-// user edits to overlay/env always win.
+// ensureOverlaySidecars writes claude-overlay.json, claude-env.json, and
+// the per-session logs dir if any are missing. Leaves existing files
+// alone — user edits to overlay/env always win.
 func ensureOverlaySidecars() error {
 	_ = os.MkdirAll(sessionLogDir(), 0755)
-	_ = writeEnvFile(config.EnvFilePath())
+	_ = writeClaudeEnv(config.ClaudeEnvPath())
 
 	overlay := config.ClaudeOverlayPath()
 	if _, err := os.Stat(overlay); err == nil {
