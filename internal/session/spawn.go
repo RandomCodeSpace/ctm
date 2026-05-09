@@ -27,13 +27,18 @@ type Saver interface {
 
 // SpawnOpts bundles the tmux client and store so Yolo can be driven
 // from either CLI or daemon without depending on config globals.
+//
+// EnvExports is a pre-built shell-export prelude (e.g.
+// "export CLAUDE_CODE_NO_FLICKER='1' CTM_STATUSLINE_DUMP='/tmp/...'")
+// produced by config.ClaudeEnvExports(). Empty when claude-env.json
+// is absent or has no entries.
 type SpawnOpts struct {
 	Name        string
 	Workdir     string
 	Tmux        TmuxSpawner
 	Store       Saver
 	OverlayPath string
-	EnvFilePath string
+	EnvExports  string
 }
 
 // Yolo creates a detached tmux session, launches claude in yolo mode,
@@ -59,7 +64,7 @@ func Yolo(opts SpawnOpts) (Session, error) {
 	}
 
 	uid := newUUIDv4()
-	shellCmd := claude.BuildCommand(uid, "yolo", false, opts.OverlayPath, opts.EnvFilePath)
+	shellCmd := claude.BuildCommand(uid, "yolo", false, opts.OverlayPath, opts.EnvExports)
 
 	if err := opts.Tmux.NewSession(opts.Name, opts.Workdir, shellCmd); err != nil {
 		return Session{}, fmt.Errorf("tmux new-session: %w", err)

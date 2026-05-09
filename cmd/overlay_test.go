@@ -56,6 +56,9 @@ func TestBuildSampleOverlayContainsHookPaths(t *testing.T) {
 		`"/usr/local/bin/ctm statusline"`,
 		`"/usr/local/bin/ctm log-tool-use"`,
 		`"theme": "dark"`,
+		`"tui": "fullscreen"`,
+		`"viewMode": "focus"`,
+		`"remoteControlAtStartup": true`,
 		`"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"`,
 		`"PostToolUse"`,
 		`"matcher": "*"`,
@@ -79,12 +82,12 @@ func TestBuildSampleOverlayEscapesPathsWithSpaces(t *testing.T) {
 	}
 }
 
-func TestWriteEnvFileCreatesAndIsIdempotent(t *testing.T) {
+func TestWriteClaudeEnvCreatesAndIsIdempotent(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "nested", "dir", "env.sh")
+	path := filepath.Join(tmp, "nested", "dir", "claude-env.json")
 
-	if err := writeEnvFile(path); err != nil {
-		t.Fatalf("first writeEnvFile: %v", err)
+	if err := writeClaudeEnv(path); err != nil {
+		t.Fatalf("first writeClaudeEnv: %v", err)
 	}
 
 	info, err := os.Stat(path)
@@ -92,16 +95,16 @@ func TestWriteEnvFileCreatesAndIsIdempotent(t *testing.T) {
 		t.Fatalf("stat after first write: %v", err)
 	}
 	if mode := info.Mode().Perm(); mode != 0600 {
-		t.Errorf("env.sh perm = %v, want 0600", mode)
+		t.Errorf("claude-env.json perm = %v, want 0600", mode)
 	}
 
 	// User edit must survive a second call (O_EXCL bails out on EEXIST).
-	userEdit := []byte("# user edit\nexport FOO=bar\n")
+	userEdit := []byte(`{"env":{"FOO":"bar"}}`)
 	if err := os.WriteFile(path, userEdit, 0600); err != nil {
 		t.Fatalf("user edit: %v", err)
 	}
-	if err := writeEnvFile(path); err != nil {
-		t.Fatalf("second writeEnvFile: %v", err)
+	if err := writeClaudeEnv(path); err != nil {
+		t.Fatalf("second writeClaudeEnv: %v", err)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -112,7 +115,7 @@ func TestWriteEnvFileCreatesAndIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestWriteEnvFileMkdirAllErrorPath(t *testing.T) {
+func TestWriteClaudeEnvMkdirAllErrorPath(t *testing.T) {
 	// Pointing the env file at a path whose parent is a regular file forces
 	// MkdirAll to fail, exercising the error-return branch.
 	tmp := t.TempDir()
@@ -120,9 +123,9 @@ func TestWriteEnvFileMkdirAllErrorPath(t *testing.T) {
 	if err := os.WriteFile(regularFile, []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(regularFile, "child", "env.sh")
+	target := filepath.Join(regularFile, "child", "claude-env.json")
 
-	if err := writeEnvFile(target); err == nil {
+	if err := writeClaudeEnv(target); err == nil {
 		t.Errorf("expected error when parent path component is a regular file")
 	}
 }
@@ -143,7 +146,7 @@ func TestRunOverlayStatusWithOverlay(t *testing.T) {
 	if err := os.WriteFile(config.ClaudeOverlayPath(), []byte("{}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(config.EnvFilePath(), []byte("# env\n"), 0600); err != nil {
+	if err := os.WriteFile(config.ClaudeEnvPath(), []byte("# env\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -184,7 +187,7 @@ func TestRunOverlayInitCreates(t *testing.T) {
 	}
 
 	// env file + log dir should also exist.
-	if _, err := os.Stat(config.EnvFilePath()); err != nil {
+	if _, err := os.Stat(config.ClaudeEnvPath()); err != nil {
 		t.Errorf("env file not created: %v", err)
 	}
 	if st, err := os.Stat(sessionLogDir()); err != nil || !st.IsDir() {
@@ -242,7 +245,7 @@ func TestRunOverlayEditCreatesSampleAndRunsEditor(t *testing.T) {
 	if !strings.Contains(string(data), "statusLine") {
 		t.Errorf("expected sample overlay content, got:\n%s", data)
 	}
-	if _, err := os.Stat(config.EnvFilePath()); err != nil {
+	if _, err := os.Stat(config.ClaudeEnvPath()); err != nil {
 		t.Errorf("expected env file, got err: %v", err)
 	}
 }

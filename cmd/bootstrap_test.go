@@ -36,7 +36,7 @@ func TestEnsureSetupCreatesAllArtifacts(t *testing.T) {
 		config.ConfigPath(),
 		config.TmuxConfPath(),
 		config.ClaudeOverlayPath(),
-		config.EnvFilePath(),
+		config.ClaudeEnvPath(),
 	}
 	for _, p := range wantFiles {
 		if _, err := os.Stat(p); err != nil {
@@ -133,7 +133,7 @@ func TestOverlayAndEnvFilePermsAre0600(t *testing.T) {
 	}
 	for _, path := range []string{
 		config.ClaudeOverlayPath(),
-		config.EnvFilePath(),
+		config.ClaudeEnvPath(),
 	} {
 		info, err := os.Stat(path)
 		if err != nil {

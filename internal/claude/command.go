@@ -9,23 +9,13 @@ import (
 // OverlayPathIfExists returns overlayPath if the file exists and is readable,
 // otherwise returns empty string. Used to gate the --settings flag.
 func OverlayPathIfExists(overlayPath string) string {
-	return pathIfExists(overlayPath)
-}
-
-// EnvFilePathIfExists returns envFilePath if the file exists and is readable,
-// otherwise returns empty string. Used to gate env file sourcing.
-func EnvFilePathIfExists(envFilePath string) string {
-	return pathIfExists(envFilePath)
-}
-
-func pathIfExists(p string) string {
-	if p == "" {
+	if overlayPath == "" {
 		return ""
 	}
-	if _, err := os.Stat(p); err != nil {
+	if _, err := os.Stat(overlayPath); err != nil {
 		return ""
 	}
-	return p
+	return overlayPath
 }
 
 // shellQuote wraps s in single quotes, escaping any embedded single quotes.
@@ -39,22 +29,24 @@ func shellQuote(s string) string {
 // session no longer exists. Claude is the pane process — when it exits, the
 // tmux session dies.
 //
-// If envFilePath is non-empty, it is sourced via `. 'path'` at exec time,
-// BEFORE claude runs. This lets ctm set real shell env vars (e.g.
-// CLAUDE_CODE_NO_FLICKER) that claude reads during early startup, which is
-// too early for settings.json's `env` key to take effect.
+// If envExports is non-empty, it is prepended verbatim as a shell prelude
+// — e.g. "export CLAUDE_CODE_NO_FLICKER='1' CTM_STATUSLINE_DUMP='/tmp/...'".
+// The caller is responsible for loading ~/.config/ctm/claude-env.json (via
+// config.ClaudeEnvExports) and producing this string. This lets ctm set
+// real shell env vars that claude reads during early startup, which is
+// too early for the overlay's `env` block to take effect.
 //
 // If overlayPath is non-empty, it is passed via --settings to layer ctm-only
-// claude customizations (statusline, theme, etc.) on top of the user's global
-// settings without modifying ~/.claude/settings.json. Both the env file check
-// and the overlay check are TOCTOU-safe shell guards — `[ -r path ]` re-
-// evaluates at exec time and falls back gracefully if the file vanished.
+// claude customizations (statusline, theme, etc.) on top of the user's
+// global settings without modifying ~/.claude/settings.json. The overlay
+// check is a TOCTOU-safe shell guard — `[ -r path ]` re-evaluates at
+// exec time and falls back gracefully if the file vanished.
 //
 // NOTE: The || fallback fires on ANY non-zero exit from `claude --resume`,
 // not just "session not found". A crash, auth error, or Ctrl-C will also
 // trigger a fresh session with the same UUID. This is intentional — it's
 // better to recover into a usable state than to leave the user stranded.
-func BuildCommand(uuid, mode string, resume bool, overlayPath, envFilePath string) string {
+func BuildCommand(uuid, mode string, resume bool, overlayPath, envExports string) string {
 	var dangerFlag string
 	if mode == "yolo" {
 		dangerFlag = " --dangerously-skip-permissions"
@@ -89,12 +81,10 @@ func BuildCommand(uuid, mode string, resume bool, overlayPath, envFilePath strin
 			shellQuote(overlayPath), buildResume(true), buildResume(false))
 	}
 
-	// Optional env-file prefix: source it at exec time if present.
-	// Uses `.` (POSIX source) which works in bash/sh. The `{ ...; } || true`
-	// wrapper ensures a sourcing error doesn't prevent claude from launching.
-	if envFilePath != "" {
-		return fmt.Sprintf("{ [ -r %s ] && . %s; }; %s",
-			shellQuote(envFilePath), shellQuote(envFilePath), core)
+	// Optional env-export prelude: prepended verbatim. Empty when the
+	// caller had no claude-env.json or it was empty/malformed.
+	if envExports != "" {
+		return envExports + "; " + core
 	}
 	return core
 }
