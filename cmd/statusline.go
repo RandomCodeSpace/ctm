@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	"github.com/RandomCodeSpace/ctm/internal/claude"
 )
 
 func init() {
@@ -24,17 +22,15 @@ func init() {
 // we print a three-line display on stdout. Hidden because it's an
 // internal hook, not a user-facing command.
 //
-// Output layout (3 lines):
+// Output layout (2 lines):
 //
 //	Line 1: <model> · <project>           (project shown as a plain path)
-//	Line 2: c 25% (437k)  w 40%  h 10%    (context % + tokens + rate limits)
-//	Line 3: ↑ 117k  ↓ 434k                (cumulative session input / output)
+//	Line 2: ctx 25%  w 40%  h 10%         (context % + rate limits)
 //
-// Cache_read (⚡) was dropped from the status because its magnitude is
-// already captured in the context-tokens parenthesis and Claude Code's
-// own focus-mode overlay duplicates the information. Weekly / 5-hour
-// rate limits share line 2 with context because they're all
-// percentages; tokens share line 3 because both are cumulative ints.
+// Cache_read (⚡) was dropped because its magnitude is already captured
+// in the context-tokens parenthesis and Claude Code's own focus-mode
+// overlay duplicates the information. Weekly / 5-hour rate limits
+// share line 2 with context because they're all percentages.
 var statuslineCmd = &cobra.Command{
 	Use:           "statusline",
 	Short:         "Internal statusLine renderer — reads JSON on stdin (hidden)",
@@ -138,9 +134,6 @@ const (
 	cMagenta  = "\x1b[1;38;5;220m" // weekly bar
 	cYellow   = "\x1b[1;38;5;208m" // 5-hour bar
 	cHdrModel = "\x1b[1;97m"
-	cTokIn   = "\x1b[1;38;5;33m"
-	cTokOut  = "\x1b[1;38;5;37m"
-	cDimGray = "\x1b[90m"
 )
 
 func renderStatusline(in *statuslineInput) string {
@@ -152,9 +145,6 @@ func renderStatusline(in *statuslineInput) string {
 	mid := joinNonEmpty(buildContextLine(in), buildRateLimitLine(in))
 	if mid != "" {
 		lines = append(lines, mid)
-	}
-	if s := buildTokenLine(in); s != "" {
-		lines = append(lines, s)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -201,21 +191,7 @@ func buildHeader(in *statuslineInput) string {
 	}
 }
 
-// readEffortLevel is a cmd-package-local wrapper so other renderers can
-// pick up the current effort level without duplicating the path dance.
-// Silent on every error path — effort is a nice-to-have, not critical.
-func readEffortLevel() string {
-	p, err := claude.SettingsJSONPath()
-	if err != nil {
-		return ""
-	}
-	return claude.ReadEffortLevel(p)
-}
-
-// buildContextLine builds the `c <pct>% (<tokens>)` segment of line 2.
-// The context-window-used percentage is the primary signal; the
-// parenthesised token sum (input + cache_creation + cache_read, per
-// Claude Code's input-only formula) is a secondary concrete number.
+// buildContextLine builds the `ctx <pct>%` segment of line 2.
 // Returns "" when used_percentage is absent.
 func buildContextLine(in *statuslineInput) string {
 	used := in.ContextWindow.UsedPercentage
@@ -223,44 +199,7 @@ func buildContextLine(in *statuslineInput) string {
 		return ""
 	}
 	usedPct := int(math.Round(*used))
-	entry := fmt.Sprintf("%sc %d%%%s", cCyan, usedPct, cReset)
-	if ctx := contextTokens(in); ctx > 0 {
-		entry += fmt.Sprintf(" %s(%s)%s", cDimGray, fmtTokens(ctx), cReset)
-	}
-	return entry
-}
-
-// buildTokenLine renders the cumulative session token totals: `↑ <input>`
-// and `↓ <output>`. cache_read (⚡) used to live here too; it was dropped
-// from the statusline — the token magnitude is already visible as the
-// parenthesised number on the context line and Claude Code's focus-mode
-// overlay renders its own cache indicator.
-func buildTokenLine(in *statuslineInput) string {
-	var parts []string
-	add := func(glyph rune, color string, n *int64) {
-		if n == nil || *n <= 0 {
-			return
-		}
-		parts = append(parts, fmt.Sprintf("%s%c%s %s%s%s",
-			color, glyph, cReset, cDimGray, fmtTokens(*n), cReset))
-	}
-	add('↑', cTokIn, in.ContextWindow.TotalInputTokens)
-	add('↓', cTokOut, in.ContextWindow.TotalOutputTokens)
-	line := strings.Join(parts, "  ")
-
-	// Tack the current effort level onto the last line. Sourced from
-	// ~/.claude/settings.json via readEffortLevel — not in Claude
-	// Code's statusLine payload. Dim-gray so it reads as secondary
-	// info next to the token counts. Only appended when at least one
-	// token is present so a truly empty payload doesn't render a
-	// lone "· xhigh" orphan.
-	if line == "" {
-		return ""
-	}
-	if effort := readEffortLevel(); effort != "" {
-		line += fmt.Sprintf("  %s%s%s", cDimGray, effort, cReset)
-	}
-	return line
+	return fmt.Sprintf("%sctx %d%%%s", cCyan, usedPct, cReset)
 }
 
 // buildRateLimitLine renders `w <pct>%` and `h <pct>%` for weekly and

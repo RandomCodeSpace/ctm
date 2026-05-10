@@ -22,36 +22,28 @@ func TestRenderStatuslineFullPayload(t *testing.T) {
 
 	out := renderStatusline(in)
 	lines := strings.Split(out, "\n")
-	if len(lines) != 3 {
-		t.Fatalf("expected 3 lines, got %d:\n%s", len(lines), out)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d:\n%s", len(lines), out)
 	}
-	// Line 0 — Header: full model name (minus the redundant "Claude "
-	// prefix) plus the project tail.
 	if !strings.Contains(lines[0], "Sonnet 4.5 (1M)") {
 		t.Errorf("header missing full model name: %q", lines[0])
 	}
 	if !strings.Contains(lines[0], "ctm-statusline-fake") {
 		t.Errorf("header missing project tail: %q", lines[0])
 	}
-	// Line 1 — Context + rate limits share one line now: c / w / h.
-	for _, want := range []string{"c", "25%", "w", "40%", "h", "10%"} {
+	for _, want := range []string{"ctx", "25%", "w", "40%", "h", "10%"} {
 		if !strings.Contains(lines[1], want) {
 			t.Errorf("line 2 missing %q: %q", want, lines[1])
 		}
 	}
-	// ⚡ should NOT appear anywhere — cache was dropped as a separate
-	// statusline entry. (The cache_read value may still contribute to
-	// the parenthesised context-tokens sum, which is expected.)
-	if strings.Contains(out, "⚡") {
-		t.Errorf("cache glyph ⚡ should have been removed:\n%s", out)
+	if strings.Contains(lines[1], "(") || strings.Contains(lines[1], ")") {
+		t.Errorf("line 2 should not contain token-count parens: %q", lines[1])
 	}
-	// Line 2 — Tokens: input + output only.
-	for _, want := range []string{"↑", "↓", "12.3k", "6.8k"} {
-		if !strings.Contains(lines[2], want) {
-			t.Errorf("token line missing %q: %q", want, lines[2])
+	for _, banned := range []string{"⚡", "↑", "↓"} {
+		if strings.Contains(out, banned) {
+			t.Errorf("dropped glyph %q should not appear:\n%s", banned, out)
 		}
 	}
-	// No bar runes should appear anywhere.
 	for _, bar := range []string{"━", "─"} {
 		if strings.Contains(out, bar) {
 			t.Errorf("unexpected bar rune %q in output:\n%s", bar, out)
@@ -119,44 +111,6 @@ func TestContextTokens_AllNilReturnsZero(t *testing.T) {
 	in := &statuslineInput{}
 	if got := contextTokens(in); got != 0 {
 		t.Errorf("contextTokens with empty current_usage = %d, want 0", got)
-	}
-}
-
-func TestRenderStatuslineShowsContextTokens(t *testing.T) {
-	in := &statuslineInput{}
-	in.Model.DisplayName = "Claude Sonnet 4.5"
-	in.ContextWindow.UsedPercentage = floatPtr(42)
-	in.ContextWindow.CurrentUsage.InputTokens = intPtr(12000)
-	in.ContextWindow.CurrentUsage.CacheCreationInputTokens = intPtr(8000)
-	in.ContextWindow.CurrentUsage.CacheReadInputTokens = intPtr(417270)
-	// Sum = 437 270 → formats as "437.3k"
-
-	out := renderStatusline(in)
-	lines := strings.Split(out, "\n")
-	if len(lines) < 2 {
-		t.Fatalf("expected at least 2 lines, got:\n%s", out)
-	}
-	if !strings.Contains(lines[1], "437.3k") {
-		t.Errorf("line 2 missing context token count: %q", lines[1])
-	}
-	if !strings.Contains(lines[1], "42%") {
-		t.Errorf("line 2 missing context %%: %q", lines[1])
-	}
-}
-
-func TestRenderStatuslineOmitsContextTokensWhenZero(t *testing.T) {
-	in := &statuslineInput{}
-	in.Model.DisplayName = "Claude Sonnet 4.5"
-	in.ContextWindow.UsedPercentage = floatPtr(0)
-	// current_usage absent — contextTokens = 0
-
-	out := renderStatusline(in)
-	lines := strings.Split(out, "\n")
-	if len(lines) < 2 {
-		t.Fatalf("expected at least 2 lines, got:\n%s", out)
-	}
-	if strings.Contains(lines[1], "(") {
-		t.Errorf("line 2 unexpectedly includes a token-count paren: %q", lines[1])
 	}
 }
 
