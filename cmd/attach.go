@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/RandomCodeSpace/ctm/internal/claude"
+	"github.com/RandomCodeSpace/ctm/internal/agent/claude"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/health"
 	"github.com/RandomCodeSpace/ctm/internal/output"

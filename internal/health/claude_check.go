@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/RandomCodeSpace/ctm/internal/claude"
+	"github.com/RandomCodeSpace/ctm/internal/agent/claude"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
 

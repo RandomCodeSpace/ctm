@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/RandomCodeSpace/ctm/internal/claude"
+	"github.com/RandomCodeSpace/ctm/internal/agent/claude"
 )
 
 // TmuxSpawner is the narrow slice of *tmux.Client Yolo needs.
