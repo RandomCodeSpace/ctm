@@ -305,6 +305,24 @@ func TestMigrationPlan_MatchesSchemaVersion(t *testing.T) {
 	}
 }
 
+// TestNormalizeAgent_DefaultsClaude covers the read-side helper that
+// every cmd/* read path will call before dispatching to agent.For().
+// Empty value → "claude"; populated value → verbatim passthrough.
+func TestNormalizeAgent_DefaultsClaude(t *testing.T) {
+	s := &session.Session{}
+	if got := s.NormalizeAgent(); got != "claude" {
+		t.Fatalf("NormalizeAgent on zero-value = %q, want claude", got)
+	}
+	s.Agent = "codex"
+	if got := s.NormalizeAgent(); got != "codex" {
+		t.Fatalf("NormalizeAgent(codex) = %q, want codex", got)
+	}
+	s.Agent = "opencode"
+	if got := s.NormalizeAgent(); got != "opencode" {
+		t.Fatalf("NormalizeAgent(opencode) = %q, want opencode (forward-compat)", got)
+	}
+}
+
 func TestSavePermIs0600(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sessions.json")
