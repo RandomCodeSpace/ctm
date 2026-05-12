@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -288,8 +289,9 @@ func TestSaveStampsSchemaVersion(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if v := string(raw["schema_version"]); v != "1" {
-		t.Errorf("sessions.json schema_version = %s, want 1", v)
+	want := strconv.Itoa(session.SchemaVersion)
+	if v := string(raw["schema_version"]); v != want {
+		t.Errorf("sessions.json schema_version = %s, want %s", v, want)
 	}
 }
 

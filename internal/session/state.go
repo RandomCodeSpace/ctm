@@ -18,7 +18,12 @@ import (
 // SchemaVersion is the current on-disk schema version of sessions.json.
 // Bump this and append a Step to the Plan returned by MigrationPlan()
 // whenever the shape of diskData or Session changes in a non-additive way.
-const SchemaVersion = 1
+//
+// v2: adds Session.Agent (set on creation, immutable; legacy rows are
+// backfilled to "claude") and Session.AgentSessionID (opaque per-agent
+// backend identifier — for claude == UUID, for codex the thread id
+// discovered post-spawn).
+const SchemaVersion = 2
 
 // errFmtNotFound is the consistent shape returned by Get/Set/Delete/etc.
 // when a session name is unknown. Callers that distinguish "not found"
@@ -26,15 +31,48 @@ const SchemaVersion = 1
 // sentinel would be a behaviour change.
 const errFmtNotFound = "session %q not found"
 
-// MigrationPlan returns the migrate.Plan for sessions.json. Steps is empty
-// at v1 because the initial migration only stamps the version — no content
-// changes are required to turn an unversioned sessions.json into v1.
+// MigrationPlan returns the migrate.Plan for sessions.json.
+//
+//   - v0 → v1: stamp only (initial schema_version introduction).
+//   - v1 → v2: backfill agent="claude" on rows missing the field.
 func MigrationPlan() migrate.Plan {
 	return migrate.Plan{
 		Name:           "sessions.json",
 		CurrentVersion: SchemaVersion,
-		Steps:          []migrate.Step{nil}, // v0 → v1: stamp only
+		Steps: []migrate.Step{
+			nil,              // v0 → v1: stamp only
+			stampAgentClaude, // v1 → v2: backfill agent
+		},
 	}
+}
+
+// stampAgentClaude walks obj["sessions"] and sets agent="claude" on
+// rows missing the field. Idempotent — rows that already have an
+// agent value are left untouched.
+//
+// obj["sessions"] is the JSON map keyed by session name, so the
+// values are themselves objects. The step decodes lazily to keep
+// per-row diffs minimal.
+func stampAgentClaude(obj map[string]json.RawMessage) error {
+	raw, ok := obj["sessions"]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	var byName map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &byName); err != nil {
+		return fmt.Errorf("stampAgentClaude: parse sessions: %w", err)
+	}
+	for _, row := range byName {
+		if _, present := row["agent"]; !present {
+			row["agent"] = json.RawMessage(`"claude"`)
+		}
+	}
+	out, err := json.Marshal(byName)
+	if err != nil {
+		return fmt.Errorf("stampAgentClaude: marshal sessions: %w", err)
+	}
+	obj["sessions"] = out
+	return nil
 }
 
 var nameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$`)
@@ -64,6 +102,28 @@ type Session struct {
 	LastAttachedAt   time.Time `json:"last_attached_at,omitempty"`
 	LastHealthStatus string    `json:"last_health_status,omitempty"`
 	LastHealthAt     time.Time `json:"last_health_at,omitempty"`
+
+	// Agent identifies the CLI driving this session. Set at creation
+	// and never mutated. Empty value on read = legacy → normalized to
+	// "claude" by Save and NormalizeAgent. Migration v1→v2 backfills
+	// the on-disk value.
+	Agent string `json:"agent,omitempty"`
+
+	// AgentSessionID is the agent-backend session/thread identifier.
+	// For claude this equals UUID (`claude --session-id <uuid>`). For
+	// codex it is the thread UUID discovered post-spawn from the
+	// rollout file; empty until the first discovery succeeds.
+	AgentSessionID string `json:"agent_session_id,omitempty"`
+}
+
+// NormalizeAgent returns "claude" when s.Agent is empty, else s.Agent
+// verbatim. Cheap idempotent guard used by read paths that handle
+// pre-migration in-memory values without touching disk.
+func (s *Session) NormalizeAgent() string {
+	if s.Agent == "" {
+		return "claude"
+	}
+	return s.Agent
 }
 
 // ValidateName returns an error if name is not a valid session name.
@@ -207,8 +267,14 @@ func (s *Store) backupLocked() (string, error) {
 	return backupPath, nil
 }
 
-// Save adds or updates a session.
+// Save adds or updates a session. Empty sess.Agent is normalized to
+// "claude" — registry-based unknown-agent rejection is added in
+// Task 06 once at least one Agent is registered at boot.
 func (s *Store) Save(sess *Session) error {
+	if sess.Agent == "" {
+		sess.Agent = "claude"
+	}
+
 	lf, err := s.lock()
 	if err != nil {
 		return err
