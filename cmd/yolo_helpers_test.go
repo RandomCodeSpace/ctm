@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	_ "github.com/RandomCodeSpace/ctm/internal/agent/codex"  // register codex for resolveAgent tests
 	_ "github.com/RandomCodeSpace/ctm/internal/agent/hermes" // register hermes for resolveAgent tests
 	"github.com/RandomCodeSpace/ctm/internal/output"
@@ -372,6 +374,60 @@ func TestResolveAgent_Unregistered(t *testing.T) {
 	// Error must list available agents so the user can correct their flag.
 	if !strings.Contains(msg, "codex") || !strings.Contains(msg, "hermes") {
 		t.Errorf("error %q should list registered agents (codex, hermes)", msg)
+	}
+}
+
+func TestAddAgentFlag(t *testing.T) {
+	c := &cobra.Command{Use: "fake"}
+	addAgentFlag(c)
+	f := c.Flags().Lookup("agent")
+	if f == nil {
+		t.Fatal("addAgentFlag did not register --agent on the command")
+	}
+	if f.DefValue != "" {
+		t.Errorf("--agent default = %q, want \"\" (empty → DefaultAgent)", f.DefValue)
+	}
+	if !strings.Contains(f.Usage, "codex") || !strings.Contains(f.Usage, "hermes") {
+		t.Errorf("--agent usage %q should mention codex + hermes", f.Usage)
+	}
+}
+
+func TestAgentFromCmd_FlagUnset(t *testing.T) {
+	c := &cobra.Command{Use: "fake"}
+	addAgentFlag(c)
+	got, err := agentFromCmd(c)
+	if err != nil {
+		t.Fatalf("agentFromCmd err = %v, want nil", err)
+	}
+	if got != "" {
+		t.Errorf("agentFromCmd with unset flag = %q, want \"\"", got)
+	}
+}
+
+func TestAgentFromCmd_FlagSetValid(t *testing.T) {
+	c := &cobra.Command{Use: "fake"}
+	addAgentFlag(c)
+	if err := c.Flags().Set("agent", "hermes"); err != nil {
+		t.Fatalf("Flags.Set: %v", err)
+	}
+	got, err := agentFromCmd(c)
+	if err != nil {
+		t.Fatalf("agentFromCmd err = %v, want nil", err)
+	}
+	if got != "hermes" {
+		t.Errorf("agentFromCmd = %q, want hermes", got)
+	}
+}
+
+func TestAgentFromCmd_FlagSetInvalid(t *testing.T) {
+	c := &cobra.Command{Use: "fake"}
+	addAgentFlag(c)
+	if err := c.Flags().Set("agent", "not-a-real-agent"); err != nil {
+		t.Fatalf("Flags.Set: %v", err)
+	}
+	_, err := agentFromCmd(c)
+	if err == nil {
+		t.Fatal("agentFromCmd accepted unknown agent name; want error")
 	}
 }
 
