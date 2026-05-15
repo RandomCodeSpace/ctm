@@ -25,6 +25,17 @@ generated notes plus the signed checksums — see
 
 ## [Unreleased]
 
+### Added
+
+- Hermes agent support: `ctm new --agent hermes` and `ctm yolo --agent hermes`
+  spawn a Hermes Agent (https://hermes-agent.dev) session with full resume +
+  session-discovery parity to codex. `internal/agent/hermes/` mirrors
+  `internal/agent/codex/` shape; resume is `hermes --resume <id>` (flag, not
+  positional) and yolo flag is `--yolo`. Session ID discovery shells out to
+  `hermes sessions list --source cli` rather than re-introducing a SQLite
+  driver. Doctor dep list now walks `agent.Registered()` so future agents are
+  picked up automatically without code edits.
+
 ### Changed
 
 - `internal/config/config.go` schema bumped to v2. Existing

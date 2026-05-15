@@ -57,6 +57,7 @@ codex 0.130.0  ~/projects/ctm  ●
 - **YOLO mode.** Auto-commits a git checkpoint before launching with `codex --sandbox danger-full-access`, so you can always roll back.
 - **Preflight health checks.** Env vars, PATH, workdir, tmux session, codex process — cached for 60 s to keep mobile reconnects snappy.
 - **Tight lifecycle coupling.** When codex exits, the tmux session dies. No stuck bash shells, no zombie tabs.
+- **Multi-agent.** Codex is the default; pass `--agent hermes` to `ctm new` or `ctm yolo` to spawn [Hermes Agent](https://hermes-agent.dev) instead. New agents plug in via `internal/agent.Register` without touching call sites.
 - **Crash-safe state.** Atomic writes, flock-based locking, strict JSON decode with self-healing strip-to-.bak, `schema_version` + startup migrations on `sessions.json` / `config.json`.
 - **Zero non-tmux runtime deps.** Pure Go throughout. No `jq`, `pgrep`, `grep`, or `uuidgen` required.
 
