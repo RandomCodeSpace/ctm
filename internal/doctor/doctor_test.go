@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	_ "github.com/RandomCodeSpace/ctm/internal/agent/codex"  // register codex
+	_ "github.com/RandomCodeSpace/ctm/internal/agent/hermes" // register hermes
 	"github.com/RandomCodeSpace/ctm/internal/config"
 )
 
@@ -122,4 +124,22 @@ func find(checks []Check, name string) *Check {
 		}
 	}
 	return nil
+}
+
+// TestCheckDependencies_IncludesAllRegisteredAgents asserts the dep list
+// walks the agent registry so future agents (hermes, etc.) appear in
+// doctor output without code edits to this package.
+func TestCheckDependencies_IncludesAllRegisteredAgents(t *testing.T) {
+	checks := checkDependencies(context.Background(), config.Config{})
+
+	gotNames := map[string]bool{}
+	for _, c := range checks {
+		gotNames[c.Name] = true
+	}
+
+	for _, want := range []string{"dep:tmux", "dep:codex", "dep:hermes", "dep:git"} {
+		if !gotNames[want] {
+			t.Errorf("checkDependencies missing %q; got names = %v", want, gotNames)
+		}
+	}
 }
