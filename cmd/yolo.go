@@ -14,17 +14,36 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/RandomCodeSpace/ctm/internal/agent"
 	"github.com/RandomCodeSpace/ctm/internal/output"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
 
-// resolveAgent validates the --agent flag value against the registry.
-// Returns ("", nil) when name is empty — caller falls back to
-// session.DefaultAgent via the empty-Agent handling in spawn.go.
-// Returns an error listing registered agents when name is non-empty
-// but unknown, so the user sees what choices they have.
+const agentFlagUsage = "Agent to spawn (codex, hermes). Empty uses the configured default."
+
+// addAgentFlag registers the --agent flag on a command. Single
+// definition shared by ctm new / yolo / yolo! / safe so the flag name,
+// default, and usage description don't drift between commands.
+func addAgentFlag(c *cobra.Command) {
+	c.Flags().String("agent", "", agentFlagUsage)
+}
+
+// agentFromCmd reads the --agent flag and validates it via resolveAgent.
+// Shared by every RunE that accepts --agent so the read + validate
+// pattern isn't duplicated across commands.
+func agentFromCmd(cmd *cobra.Command) (string, error) {
+	name, _ := cmd.Flags().GetString("agent")
+	return resolveAgent(name)
+}
+
+// resolveAgent validates an agent name against the registry. Returns
+// ("", nil) for empty input (caller falls back to session.DefaultAgent
+// via spawn.go's empty-Agent handling), and an error listing
+// registered agents when name is non-empty but unknown so the user
+// sees what choices they have.
 func resolveAgent(name string) (string, error) {
 	if name == "" {
 		return "", nil

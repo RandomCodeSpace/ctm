@@ -15,7 +15,7 @@ import (
 )
 
 func init() {
-	newCmd.Flags().String("agent", "", "Agent to spawn (codex, hermes). Empty uses the configured default.")
+	addAgentFlag(newCmd)
 	rootCmd.AddCommand(newCmd)
 }
 
@@ -72,8 +72,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	agentFlag, _ := cmd.Flags().GetString("agent")
-	agentName, err := resolveAgent(agentFlag)
+	agentName, err := agentFromCmd(cmd)
 	if err != nil {
 		return err
 	}

@@ -28,7 +28,7 @@ import (
 
 func init() {
 	for _, c := range []*cobra.Command{yoloCmd, yoloBangCmd, safeCmd} {
-		c.Flags().String("agent", "", "Agent to spawn (codex, hermes). Empty uses the configured default.")
+		addAgentFlag(c)
 	}
 	rootCmd.AddCommand(yoloCmd)
 	rootCmd.AddCommand(yoloBangCmd)
@@ -109,8 +109,7 @@ func runYolo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	agentFlag, _ := cmd.Flags().GetString("agent")
-	agentName, err := resolveAgent(agentFlag)
+	agentName, err := agentFromCmd(cmd)
 	if err != nil {
 		return err
 	}
@@ -158,8 +157,7 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	agentFlag, _ := cmd.Flags().GetString("agent")
-	agentName, err := resolveAgent(agentFlag)
+	agentName, err := agentFromCmd(cmd)
 	if err != nil {
 		return err
 	}
@@ -195,8 +193,7 @@ func runSafe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	agentFlag, _ := cmd.Flags().GetString("agent")
-	agentName, err := resolveAgent(agentFlag)
+	agentName, err := agentFromCmd(cmd)
 	if err != nil {
 		return err
 	}
