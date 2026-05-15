@@ -21,12 +21,12 @@ import (
 // shouldResumeExisting reports whether a stored session should be resumed via
 // preflight rather than torn down and recreated. A session is resumable iff
 // its recorded mode matches the requested mode — tmux liveness is irrelevant
-// because preflight handles a dead tmux pane by recreating it with
-// `claude --resume UUID`, preserving the session's conversation history.
+// because preflight handles a dead tmux pane by recreating it with the agent's
+// resume command, preserving the session's conversation history.
 //
 // Regression guard: the previous implementation also required the tmux session
-// to be live, which caused `ctm yolo <name>` after claude exited to delete the
-// stored UUID and spawn a fresh session, losing all chat history.
+// to be live, which caused `ctm yolo <name>` after the agent exited to delete
+// the stored UUID and spawn a fresh session, losing all chat history.
 func shouldResumeExisting(sess *session.Session, requestedMode string) bool {
 	return sess != nil && sess.Mode == requestedMode
 }
@@ -86,25 +86,23 @@ func eventsFor(mode string) (hookEvent, serveEvent string) {
 	return "on_" + mode, "session_attached"
 }
 
-// fireLaunchEvents fires both the user-defined shell hook and the serve-hub
-// event for a launch in the given mode. Failures inside fireHook /
-// fireServeEvent are already swallowed; this wrapper just composes them.
+// fireLaunchEvents fires the user-defined shell hook for a launch in
+// the given mode. Failures inside fireHook are already swallowed.
 func fireLaunchEvents(store *session.Store, name, workdir, mode string) {
-	hookEvent, serveEvent := eventsFor(mode)
+	hookEvent, _ := eventsFor(mode)
 	intent := yoloIntent(store, name, workdir, mode)
 	fireHook(hookEvent, intent)
-	fireServeEvent(serveEvent, intent)
 }
 
-// resolveSimpleName returns args[0] when present, else "claude". This is the
-// name-resolution rule shared by `ctm yolo!` and `ctm safe`. (`ctm yolo` has a
-// richer rule that also handles 2-arg form and prompts for a path, so it
-// stays inline.)
+// resolveSimpleName returns args[0] when present, else session.DefaultAgent.
+// This is the name-resolution rule shared by `ctm yolo!` and `ctm safe`.
+// (`ctm yolo` has a richer rule that also handles 2-arg form and prompts for
+// a path, so it stays inline.)
 func resolveSimpleName(args []string) string {
 	if len(args) > 0 {
 		return args[0]
 	}
-	return "claude"
+	return session.DefaultAgent
 }
 
 // resolveModeTarget produces the (name, workdir) pair used by `ctm yolo!` and

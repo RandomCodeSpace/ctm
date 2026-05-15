@@ -40,8 +40,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "ctm [session-name]",
-	Short: "Claude Tmux Manager — seamless session management",
-	Long:  "ctm manages Claude Code sessions inside tmux with pre-flight health checks, persistent modes, and mobile-optimized configuration.",
+	Short: "Codex Tmux Manager — seamless session management",
+	Long:  "ctm manages codex sessions inside tmux with pre-flight health checks, persistent modes, and mobile-optimized configuration.",
 	Args:  cobra.MaximumNArgs(1),
 	// Configure slog before any subcommand runs so diagnostic lines
 	// from pre-flight checks and state loads respect --log-level.

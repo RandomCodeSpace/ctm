@@ -1,9 +1,9 @@
 // Cobra wiring + RunE bodies for the yolo / yolo! / safe commands.
 //
 // Split out from yolo.go so the heavy integration paths (preflight,
-// createAndAttach, gitCheckpoint, EnsureServeRunning) live in one place
-// and can be excluded from the SonarCloud coverage gate. The pure
-// helpers each runner composes (decideModeAction, fireLaunchEvents,
+// createAndAttach, gitCheckpoint) live in one place and can be
+// excluded from the SonarCloud coverage gate. The pure helpers each
+// runner composes (decideModeAction, fireLaunchEvents,
 // resolveModeTarget, tearDownForRecreate, printBanner, etc.) all live
 // in yolo.go and are unit-tested there.
 
@@ -21,7 +21,6 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/output"
 	"github.com/RandomCodeSpace/ctm/internal/prompt"
-	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/shell"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -58,7 +57,6 @@ var safeCmd = &cobra.Command{
 }
 
 func runYolo(cmd *cobra.Command, args []string) error {
-	proc.EnsureServeRunning(cmd.Context())
 	out := output.Stdout()
 	cfgPtr, err := ensureSetup()
 	if err != nil {
@@ -117,8 +115,8 @@ func runYolo(cmd *cobra.Command, args []string) error {
 	fireLaunchEvents(store, name, workdir, "yolo")
 
 	// If session exists and mode matches → preflight. preflight handles both
-	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
-	// so the session's claude history survives `claude` exiting on its own.
+	// live tmux (plain reattach) and dead tmux (recreate via the agent's resume
+	// command), so the session's history survives the agent exiting on its own.
 	// Only kill/delete when the mode actually changes (safe → yolo) or when
 	// the user forces fresh state via `ctm yolo!` / `ctm kill`.
 	sess, getErr := store.Get(name)
@@ -136,7 +134,6 @@ func runYolo(cmd *cobra.Command, args []string) error {
 }
 
 func runYoloBang(cmd *cobra.Command, args []string) error {
-	proc.EnsureServeRunning(cmd.Context())
 	out := output.Stdout()
 	cfgPtr, err := ensureSetup()
 	if err != nil {
@@ -168,7 +165,6 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 }
 
 func runSafe(cmd *cobra.Command, args []string) error {
-	proc.EnsureServeRunning(cmd.Context())
 	out := output.Stdout()
 	cfgPtr, err := ensureSetup()
 	if err != nil {
@@ -188,8 +184,8 @@ func runSafe(cmd *cobra.Command, args []string) error {
 	fireLaunchEvents(store, name, workdir, "safe")
 
 	// If session exists and mode matches → preflight. preflight handles both
-	// live tmux (plain reattach) and dead tmux (recreate with --resume UUID),
-	// so the session's claude history survives `claude` exiting on its own.
+	// live tmux (plain reattach) and dead tmux (recreate via the agent's resume
+	// command), so the session's history survives the agent exiting on its own.
 	// Force-fresh escape hatches: `ctm kill <name>` / `ctm forget <name>`.
 	sess, getErr := store.Get(name)
 	switch decideModeAction(sess, getErr, "safe") {

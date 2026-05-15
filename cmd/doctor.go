@@ -41,7 +41,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// --- Dependencies ---
 	out.Bold("Dependencies:")
-	for _, dep := range []string{"tmux", "claude", "git"} {
+	for _, dep := range []string{"tmux", "codex", "git"} {
 		if path, ok := doctor.LookupBinary(dep); ok {
 			out.Success("  [OK] %-10s %s", dep, path)
 		} else {

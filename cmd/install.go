@@ -77,27 +77,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 5. Migrate from cc if ~/.claude/cc-sessions exists
-	ccSessionsDir := filepath.Join(home, ".claude", "cc-sessions")
-	if _, err := os.Stat(ccSessionsDir); err == nil {
-		migrated, err := shell.MigrateFromCC(ccSessionsDir, config.SessionsPath())
-		if err != nil {
-			out.Warn("Migration warning: %v", err)
-		} else if len(migrated) > 0 {
-			out.Success("Migrated %d session(s) from cc: %v", len(migrated), migrated)
-		} else {
-			out.Info("No sessions to migrate from cc.")
-		}
-	}
-
-	// 6. Claude-side defaults are now expressed entirely in
-	// ~/.config/ctm/claude-overlay.json (created by step 6 of ensureSetup
-	// via writeOverlayFile). ctm never mutates ~/.claude.json or
-	// ~/.claude/settings.json — the overlay is merged in via
-	// `claude --settings` only when claude is launched through ctm,
-	// leaving direct `claude` invocations completely unaffected.
-
-	// 7. Print summary
+	// 5. Print summary
 	fmt.Println()
 	out.Bold("ctm installed successfully!")
 	out.Info("Run:  source ~/.bashrc")

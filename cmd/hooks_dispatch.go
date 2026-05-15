@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"net/url"
-
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/hooks"
-	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 )
 
@@ -50,28 +47,4 @@ func fireHook(event string, sess *session.Session) {
 		}
 	}
 	_ = hooks.Run(event, cfg.Hooks, hctx, cfg.HookTimeout())
-}
-
-// fireServeEvent is fireHook's sibling for the in-process ctm serve
-// daemon: it POSTs the lifecycle event to /api/hooks/:event so the
-// web UI's hub sees session_new / session_attached / session_killed /
-// on_yolo as soon as the CLI-side action completes. Failures are
-// swallowed inside proc.PostEvent — serve being down must never
-// block the user's CLI flow.
-func fireServeEvent(event string, sess *session.Session) {
-	if sess == nil {
-		return
-	}
-	form := url.Values{}
-	form.Set("name", sess.Name)
-	if sess.UUID != "" {
-		form.Set("uuid", sess.UUID)
-	}
-	if sess.Mode != "" {
-		form.Set("mode", sess.Mode)
-	}
-	if sess.Workdir != "" {
-		form.Set("workdir", sess.Workdir)
-	}
-	proc.PostEvent(event, form)
 }

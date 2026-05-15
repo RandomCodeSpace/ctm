@@ -266,34 +266,3 @@ func TestIntegration_SessionNameValidation(t *testing.T) {
 	}
 }
 
-func TestIntegration_MigrateFromCC(t *testing.T) {
-	home := t.TempDir()
-
-	// Create fake cc-sessions dir with a file
-	ccSessionsDir := filepath.Join(home, ".claude", "cc-sessions")
-	if err := os.MkdirAll(ccSessionsDir, 0755); err != nil {
-		t.Fatalf("failed to create cc-sessions dir: %v", err)
-	}
-	// Write a fake session file: name is the filename (without ext), content is UUID
-	fakeUUID := "12345678-1234-1234-1234-123456789abc"
-	if err := os.WriteFile(filepath.Join(ccSessionsDir, "myproject.txt"), []byte(fakeUUID), 0644); err != nil {
-		t.Fatalf("failed to write fake session file: %v", err)
-	}
-
-	// Create .bashrc for install
-	bashrc := filepath.Join(home, ".bashrc")
-	if err := os.WriteFile(bashrc, []byte("# existing content\n"), 0644); err != nil {
-		t.Fatalf("failed to create .bashrc: %v", err)
-	}
-
-	// Run install — it should detect and migrate cc-sessions
-	out, err := ctmRun(t, home, "install")
-	if err != nil {
-		t.Fatalf("ctm install failed: %v\noutput: %s", err, out)
-	}
-
-	// Verify migration message in output
-	if !strings.Contains(strings.ToLower(out), "migrat") {
-		t.Errorf("expected install output to mention migration, got:\n%s", out)
-	}
-}

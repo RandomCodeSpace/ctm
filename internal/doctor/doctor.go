@@ -89,7 +89,7 @@ func Run(ctx context.Context, cfg config.Config) []Check {
 }
 
 func checkDependencies(_ context.Context, _ config.Config) []Check {
-	deps := []string{"tmux", "claude", "git"}
+	deps := []string{"tmux", "codex", "git"}
 	out := make([]Check, 0, len(deps))
 	for _, dep := range deps {
 		c := Check{Name: "dep:" + dep}

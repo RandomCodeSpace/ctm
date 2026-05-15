@@ -5,11 +5,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/RandomCodeSpace/ctm/internal/agent/claude"
+	"github.com/RandomCodeSpace/ctm/internal/agent"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/health"
 	"github.com/RandomCodeSpace/ctm/internal/output"
-	"github.com/RandomCodeSpace/ctm/internal/serve/proc"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 	"github.com/spf13/cobra"
@@ -47,17 +46,13 @@ func init() {
 }
 
 func runAttach(cmd *cobra.Command, args []string) error {
-	name := "claude"
+	name := session.DefaultAgent
 	if len(args) > 0 {
 		name = args[0]
 	}
 	if err := session.ValidateName(name); err != nil {
 		return err
 	}
-
-	// Bring up ctm serve in the background (no-op if already running).
-	// Best-effort — never blocks the attach flow.
-	proc.EnsureServeRunning(cmd.Context())
 
 	out := output.Stderr()
 	cfgPtr, err := ensureSetup()
@@ -88,12 +83,10 @@ func createAndAttach(name, workdir, _ string, store *session.Store, tc *tmux.Cli
 	out.Info("No session %q found — creating in %s", name, abs)
 
 	sess, err := session.Yolo(session.SpawnOpts{
-		Name:        name,
-		Workdir:     abs,
-		Tmux:        tc,
-		Store:       store,
-		OverlayPath: claude.OverlayPathIfExists(config.ClaudeOverlayPath()),
-		EnvExports:  config.ClaudeEnvExports(),
+		Name:    name,
+		Workdir: abs,
+		Tmux:    tc,
+		Store:   store,
 	})
 	if err != nil {
 		return fmt.Errorf("createAndAttach spawn: %w", err)
@@ -105,8 +98,6 @@ func createAndAttach(name, workdir, _ string, store *session.Store, tc *tmux.Cli
 
 	out.Success("created session %q", name)
 	fireHook("on_new", &sess)
-	fireServeEvent("session_new", &sess)
-	fireServeEvent("session_attached", &sess)
 	return tc.Go(name)
 }
 
@@ -144,12 +135,23 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 		return fmt.Errorf(errHealthCheckFmt, wdResult.Name)
 	}
 
-	// 3. Tmux session check — if missing, recreate with --resume
+	a, ok := agent.For(sess.NormalizeAgent())
+	if !ok {
+		return fmt.Errorf("session %q references unregistered agent %q", sess.Name, sess.NormalizeAgent())
+	}
+	resumeSpec := agent.SpawnSpec{
+		UUID:           sess.UUID,
+		AgentSessionID: sess.AgentSessionID,
+		Mode:           sess.Mode,
+		Resume:         true,
+	}
+
+	// 3. Tmux session check — if missing, recreate with resume semantics
 	out.Debug(Verbose, "checking tmux session: %s", sess.Name)
 	tmuxResult := health.CheckTmuxSession(tc, sess.Name)
 	if !tmuxResult.Passed() {
 		out.Warn("tmux session %q missing — recreating", sess.Name)
-		shellCmd := claude.BuildCommand(sess.UUID, sess.Mode, true, claude.OverlayPathIfExists(config.ClaudeOverlayPath()), config.ClaudeEnvExports())
+		shellCmd := a.BuildCommand(resumeSpec)
 		if err := tc.NewSession(sess.Name, sess.Workdir, shellCmd); err != nil {
 			return fmt.Errorf("recreating tmux session: %w", err)
 		}
@@ -160,20 +162,19 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 			out.Warn(warnUpdateAttached, err)
 		}
 		fireHook("on_attach", sess)
-		fireServeEvent("session_attached", sess)
 		if err := tc.Go(sess.Name); err != nil {
 			return fmt.Errorf(errAttachingFmt, sess.Name, err)
 		}
 		return nil
 	}
 
-	// 4. Claude process check — if dead, respawn with --resume
-	out.Debug(Verbose, "checking claude process in session: %s", sess.Name)
-	claudeResult := health.CheckClaudeProcess(tc, sess.Name)
-	if !claudeResult.Passed() {
-		out.Debug(Verbose, "claude not running, restarting with --resume")
-		out.Warn("claude process dead — respawning")
-		shellCmd := claude.BuildCommand(sess.UUID, sess.Mode, true, claude.OverlayPathIfExists(config.ClaudeOverlayPath()), config.ClaudeEnvExports())
+	// 4. Agent process check — if dead, respawn with resume semantics
+	out.Debug(Verbose, "checking %s process in session: %s", a.Name(), sess.Name)
+	agentResult := health.CheckAgentProcess(tc, sess.Name, a.ProcessName())
+	if !agentResult.Passed() {
+		out.Debug(Verbose, "%s not running, restarting with resume", a.Name())
+		out.Warn("%s process dead — respawning", a.Name())
+		shellCmd := a.BuildCommand(resumeSpec)
 		if err := tc.RespawnPane(sess.Name, shellCmd); err != nil {
 			return fmt.Errorf("respawning pane: %w", err)
 		}
@@ -184,7 +185,6 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 			out.Warn(warnUpdateAttached, err)
 		}
 		fireHook("on_attach", sess)
-		fireServeEvent("session_attached", sess)
 		if err := tc.Go(sess.Name); err != nil {
 			return fmt.Errorf(errAttachingFmt, sess.Name, err)
 		}
@@ -201,7 +201,6 @@ func preflight(sess *session.Session, cfg config.Config, store *session.Store, t
 	}
 
 	fireHook("on_attach", sess)
-	fireServeEvent("session_attached", sess)
 	if err := tc.Go(sess.Name); err != nil {
 		return fmt.Errorf(errAttachingFmt, sess.Name, err)
 	}
