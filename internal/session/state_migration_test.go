@@ -118,7 +118,7 @@ func TestMigration_V1ToV2_Idempotent(t *testing.T) {
 // TestSession_AgentFieldRoundTrip verifies that the Agent and
 // AgentSessionID fields survive a Save / Get cycle for non-default
 // agents. (The default agent path is covered by
-// TestSession_EmptyAgentDefaultsCodexOnSave.)
+// TestSession_EmptyAgentDefaultsToDefaultAgentOnSave.)
 func TestSession_AgentFieldRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	store := session.NewStore(filepath.Join(dir, "sessions.json"))
@@ -145,9 +145,11 @@ func TestSession_AgentFieldRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSession_EmptyAgentDefaultsCodexOnSave verifies the read-side
-// guard: Save sets s.Agent = "codex" when empty.
-func TestSession_EmptyAgentDefaultsCodexOnSave(t *testing.T) {
+// TestSession_EmptyAgentDefaultsToDefaultAgentOnSave verifies the
+// write-side guard: Save sets s.Agent = DefaultAgent when empty.
+// Asserts on the constant (not a literal) so a future default flip
+// doesn't silently leave this test pinned to a stale value.
+func TestSession_EmptyAgentDefaultsToDefaultAgentOnSave(t *testing.T) {
 	dir := t.TempDir()
 	store := session.NewStore(filepath.Join(dir, "sessions.json"))
 	in := &session.Session{
@@ -161,8 +163,9 @@ func TestSession_EmptyAgentDefaultsCodexOnSave(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 	out, _ := store.Get("bar")
-	if out.Agent != "codex" {
-		t.Fatalf("empty Agent should default to \"codex\" on Save, got %q", out.Agent)
+	if out.Agent != session.DefaultAgent {
+		t.Fatalf("empty Agent should default to %q on Save, got %q",
+			session.DefaultAgent, out.Agent)
 	}
 }
 
