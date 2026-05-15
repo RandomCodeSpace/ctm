@@ -44,8 +44,8 @@ func TestBuildCommand(t *testing.T) {
 			want: "hermes -c --yolo || hermes --yolo",
 		},
 		{
-			name:       "env-prelude-fresh-safe",
-			mode:       "safe", resume: false,
+			name: "env-prelude-fresh-safe",
+			mode: "safe", resume: false,
 			envExports: "export FOO='bar'",
 			want:       "export FOO='bar'; hermes",
 		},

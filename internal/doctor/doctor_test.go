@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/RandomCodeSpace/ctm/internal/config"
 	_ "github.com/RandomCodeSpace/ctm/internal/agent/codex"  // register codex
 	_ "github.com/RandomCodeSpace/ctm/internal/agent/hermes" // register hermes
+	"github.com/RandomCodeSpace/ctm/internal/config"
 )
 
 // TestRun_Shape asserts Run() returns at least one Check of each status
