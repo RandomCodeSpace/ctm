@@ -4,10 +4,7 @@ go 1.25.0
 
 require (
 	github.com/chzyer/readline v1.5.1
-	github.com/fsnotify/fsnotify v1.7.0
-	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/crypto v0.50.0
 )
 
 require (

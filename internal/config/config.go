@@ -14,7 +14,12 @@ import (
 // SchemaVersion is the current on-disk schema version of config.json.
 // Bump this and append a Step to the Plan returned by MigrationPlan()
 // whenever the shape of Config changes in a non-additive way.
-const SchemaVersion = 1
+//
+// v2: rewrite legacy required_in_path entries of "claude" to "codex"
+// after the claude CLI was removed. Existing configs that customized
+// the list to add extra binaries keep those additions; only the exact
+// literal "claude" is swapped.
+const SchemaVersion = 2
 
 // Config holds user preferences for ctm.
 type Config struct {
@@ -49,35 +54,6 @@ type Config struct {
 	// HookTimeoutSec is the per-hook wall-clock ceiling. Zero → default
 	// (5 s). Set a very large number to effectively disable the cap.
 	HookTimeoutSec int `json:"hook_timeout_seconds"`
-
-	// Serve holds configuration for `ctm serve` (the local UI daemon).
-	// Missing from old configs is fine: strict decoding tolerates absent
-	// keys, and zero-valued fields fall back to built-in defaults via
-	// their accessor helpers.
-	Serve ServeConfig `json:"serve"`
-}
-
-// ServeConfig holds knobs for the `ctm serve` daemon. All fields are
-// optional; zero values resolve to defaults via ServeConfig accessors.
-type ServeConfig struct {
-	Port              int                 `json:"port"`
-	BearerToken       string              `json:"bearer_token"`
-	WebhookURL        string              `json:"webhook_url"`
-	WebhookAuth       string              `json:"webhook_auth"`
-	StatuslineDumpDir string              `json:"statusline_dump_dir"`
-	Attention         AttentionThresholds `json:"attention"`
-}
-
-// AttentionThresholds controls when `ctm serve` flags a session as
-// needing user attention. Zero fields resolve to defaults via
-// Resolved().
-type AttentionThresholds struct {
-	ErrorRatePct         int `json:"error_rate_pct"`
-	ErrorRateWindow      int `json:"error_rate_window"`
-	IdleMinutes          int `json:"idle_minutes"`
-	QuotaPct             int `json:"quota_pct"`
-	ContextPct           int `json:"context_pct"`
-	YoloUncheckedMinutes int `json:"yolo_unchecked_minutes"`
 }
 
 // Default values for log rotation knobs. Exposed as constants so callers
@@ -92,54 +68,6 @@ const (
 // sync manually so this package doesn't depend on internal/hooks (which
 // would create a cycle via cmd).
 const DefaultHookTimeoutSec = 5
-
-// Defaults for `ctm serve` attention thresholds and port. Exposed so
-// callers can reference them without re-hardcoding the numeric literal.
-const (
-	DefaultServePort                     = 37778
-	DefaultAttentionErrorRatePct         = 20
-	DefaultAttentionErrorRateWindow      = 20
-	DefaultAttentionIdleMinutes          = 5
-	DefaultAttentionQuotaPct             = 85
-	DefaultAttentionContextPct           = 90
-	DefaultAttentionYoloUncheckedMinutes = 30
-)
-
-// Port returns the listen port for `ctm serve`, substituting
-// DefaultServePort when the configured value is non-positive so old
-// configs that predate the serve block still bind the canonical port.
-func (s ServeConfig) ResolvedPort() int {
-	if s.Port <= 0 {
-		return DefaultServePort
-	}
-	return s.Port
-}
-
-// Resolved returns a copy of t with any zero-valued field replaced by
-// its built-in default. Mirrors LogPolicy()/HookTimeout(): old configs
-// loaded without the attention block get sane thresholds without a
-// schema bump.
-func (t AttentionThresholds) Resolved() AttentionThresholds {
-	if t.ErrorRatePct <= 0 {
-		t.ErrorRatePct = DefaultAttentionErrorRatePct
-	}
-	if t.ErrorRateWindow <= 0 {
-		t.ErrorRateWindow = DefaultAttentionErrorRateWindow
-	}
-	if t.IdleMinutes <= 0 {
-		t.IdleMinutes = DefaultAttentionIdleMinutes
-	}
-	if t.QuotaPct <= 0 {
-		t.QuotaPct = DefaultAttentionQuotaPct
-	}
-	if t.ContextPct <= 0 {
-		t.ContextPct = DefaultAttentionContextPct
-	}
-	if t.YoloUncheckedMinutes <= 0 {
-		t.YoloUncheckedMinutes = DefaultAttentionYoloUncheckedMinutes
-	}
-	return t
-}
 
 // HookTimeout returns the per-hook wall-clock ceiling. A zero
 // HookTimeoutSec resolves to DefaultHookTimeoutSec so old configs (and
@@ -156,7 +84,7 @@ func Default() Config {
 	return Config{
 		SchemaVersion:           SchemaVersion,
 		RequiredEnv:             []string{"PATH", "HOME"},
-		RequiredInPath:          []string{"claude", "node", "go", "bun"},
+		RequiredInPath:          []string{"codex", "node", "go", "bun"},
 		ScrollbackLines:         50000,
 		HealthCheckTimeoutSec:   5,
 		GitCheckpointBeforeYolo: true,
@@ -164,17 +92,6 @@ func Default() Config {
 		LogMaxSizeMB:            DefaultLogMaxSizeMB,
 		LogMaxAgeDays:           DefaultLogMaxAgeDays,
 		LogMaxFiles:             DefaultLogMaxFiles,
-		Serve: ServeConfig{
-			Port: DefaultServePort,
-			Attention: AttentionThresholds{
-				ErrorRatePct:         DefaultAttentionErrorRatePct,
-				ErrorRateWindow:      DefaultAttentionErrorRateWindow,
-				IdleMinutes:          DefaultAttentionIdleMinutes,
-				QuotaPct:             DefaultAttentionQuotaPct,
-				ContextPct:           DefaultAttentionContextPct,
-				YoloUncheckedMinutes: DefaultAttentionYoloUncheckedMinutes,
-			},
-		},
 	}
 }
 
@@ -226,35 +143,6 @@ func TmuxConfPath() string {
 	return filepath.Join(Dir(), "tmux.conf")
 }
 
-// AllowedOriginsPath returns the path to the extra-origins file.
-// One origin per line; blank lines and `#`-prefixed lines are ignored.
-// Read by the serve mutation allowlist so mobile / reverse-proxy
-// hostnames persist across reloads without needing env vars.
-func AllowedOriginsPath() string {
-	return filepath.Join(Dir(), "allowed_origins")
-}
-
-// ClaudeOverlayPath returns the path to the optional claude settings overlay.
-// When this file exists, ctm passes --settings <path> to every claude
-// invocation, layering it on top of the user's existing claude settings
-// without modifying ~/.claude/settings.json.
-func ClaudeOverlayPath() string {
-	return filepath.Join(Dir(), "claude-overlay.json")
-}
-
-// ClaudeEnvPath returns the path to the ctm-managed JSON env file.
-// When this file exists, ctm reads it at every claude-launching command
-// and exports its `env` block into the shell BEFORE exec'ing claude.
-// Use this for env vars claude reads too early in startup for the
-// overlay's `env` block to apply (e.g., CLAUDE_CODE_NO_FLICKER).
-//
-// Replaces the older bash-script env.sh — JSON keeps the format
-// consistent with the rest of ctm's user config (config.json,
-// sessions.json, claude-overlay.json, .bestpractices.json).
-func ClaudeEnvPath() string {
-	return filepath.Join(Dir(), "claude-env.json")
-}
-
 // Load reads Config from path. If the file does not exist it creates it
 // with defaults and returns those defaults.
 //
@@ -281,9 +169,11 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-// MigrationPlan returns the migrate.Plan for config.json. Steps is empty at
-// v1 because the initial migration only stamps the version — no content
-// changes are required to turn an unversioned config.json into v1.
+// MigrationPlan returns the migrate.Plan for config.json.
+//
+//   - v0 → v1: stamp only (initial schema_version introduction).
+//   - v1 → v2: rewrite literal "claude" entries in required_in_path
+//     to "codex" after the claude CLI was removed.
 //
 // Callers run the returned Plan before Load so the typed unmarshal sees
 // a file already at the current SchemaVersion.
@@ -291,8 +181,52 @@ func MigrationPlan() migrate.Plan {
 	return migrate.Plan{
 		Name:           "config.json",
 		CurrentVersion: SchemaVersion,
-		Steps:          []migrate.Step{nil}, // v0 → v1: stamp only
+		Steps: []migrate.Step{
+			nil,                       // v0 → v1: stamp only
+			rewriteRequiredPathClaude, // v1 → v2: claude → codex in required_in_path
+		},
 	}
+}
+
+// rewriteRequiredPathClaude rewrites the literal string "claude" in
+// obj["required_in_path"] to "codex". Idempotent — a slice that
+// already contains "codex" instead of "claude" passes through
+// unchanged. Non-string entries (defensive) are passed through verbatim.
+//
+// Custom additions ("claude", "node", "go", "bun", "rust") are
+// preserved aside from the targeted swap, so users who tailored the
+// list keep their tailoring.
+func rewriteRequiredPathClaude(obj map[string]json.RawMessage) error {
+	raw, ok := obj["required_in_path"]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	var list []json.RawMessage
+	if err := json.Unmarshal(raw, &list); err != nil {
+		// Malformed entry — leave it alone; jsonstrict will surface
+		// the error on the typed Load that follows.
+		return nil
+	}
+	changed := false
+	for i, entry := range list {
+		var s string
+		if err := json.Unmarshal(entry, &s); err != nil {
+			continue
+		}
+		if s == "claude" {
+			list[i] = json.RawMessage(`"codex"`)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	out, err := json.Marshal(list)
+	if err != nil {
+		return err
+	}
+	obj["required_in_path"] = out
+	return nil
 }
 
 // write marshals cfg to path, creating parent directories as needed. It
