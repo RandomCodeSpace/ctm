@@ -159,8 +159,8 @@ func TestResolveSimpleName(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"no args → default 'codex'", nil, "codex"},
-		{"empty slice → default 'codex'", []string{}, "codex"},
+		{"no args → DefaultAgent", nil, session.DefaultAgent},
+		{"empty slice → DefaultAgent", []string{}, session.DefaultAgent},
 		{"single arg → that name", []string{"my-sess"}, "my-sess"},
 		{"extra args ignored — first wins", []string{"first", "ignored"}, "first"},
 	}
@@ -235,8 +235,8 @@ func TestResolveModeTargetDefaultName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveModeTarget: %v", err)
 	}
-	if name != "codex" {
-		t.Errorf("default name = %q, want codex", name)
+	if name != session.DefaultAgent {
+		t.Errorf("default name = %q, want %q", name, session.DefaultAgent)
 	}
 }
 

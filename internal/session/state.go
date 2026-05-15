@@ -28,7 +28,13 @@ const SchemaVersion = 3
 // field set. Exposed as a constant so cmd/* code branching on the
 // default doesn't drift from the migration / Save / NormalizeAgent
 // codepaths.
-const DefaultAgent = "codex"
+//
+// Note on the legacy "claude" remap: Save and NormalizeAgent map
+// legacy "claude" values to "codex" (the v2→v3 migration target) —
+// not DefaultAgent — so changing the default later doesn't silently
+// move historical claude sessions onto whatever the current default
+// happens to be.
+const DefaultAgent = "hermes"
 
 // errFmtNotFound is the consistent shape returned by Get/Set/Delete/etc.
 // when a session name is unknown. Callers that distinguish "not found"
@@ -158,16 +164,21 @@ type Session struct {
 	AgentSessionID string `json:"agent_session_id,omitempty"`
 }
 
-// NormalizeAgent returns DefaultAgent ("codex") when s.Agent is empty,
-// else s.Agent verbatim. Cheap idempotent guard used by read paths
-// that handle pre-migration in-memory values without touching disk.
+// NormalizeAgent returns DefaultAgent when s.Agent is empty, else
+// s.Agent verbatim. Cheap idempotent guard used by read paths that
+// handle pre-migration in-memory values without touching disk.
 //
-// Legacy "claude" values that escaped the v2→v3 migration are also
-// remapped to "codex" so a stale in-memory Session never surfaces as
-// an agent.For miss at the call site.
+// Legacy "claude" values that escaped the v2→v3 migration are
+// remapped to "codex" (the on-disk migration target) — not
+// DefaultAgent — so a stale in-memory Session never surfaces as an
+// agent.For miss at the call site, and changing DefaultAgent doesn't
+// silently move historical claude sessions.
 func (s *Session) NormalizeAgent() string {
-	if s.Agent == "" || s.Agent == "claude" {
+	if s.Agent == "" {
 		return DefaultAgent
+	}
+	if s.Agent == "claude" {
+		return "codex"
 	}
 	return s.Agent
 }
@@ -314,12 +325,17 @@ func (s *Store) backupLocked() (string, error) {
 }
 
 // Save adds or updates a session. Empty sess.Agent is normalized to
-// DefaultAgent ("codex"). Legacy "claude" values are also rewritten —
-// the claude implementation was removed and a stray "claude" row
-// would fail at spawn-time agent.For lookup.
+// DefaultAgent. Legacy "claude" values are rewritten to "codex" (the
+// v2→v3 migration target) — not DefaultAgent — so changing the
+// default later doesn't silently retarget historical claude sessions.
+// A stray "claude" row would otherwise fail at spawn-time agent.For
+// lookup.
 func (s *Store) Save(sess *Session) error {
-	if sess.Agent == "" || sess.Agent == "claude" {
+	switch sess.Agent {
+	case "":
 		sess.Agent = DefaultAgent
+	case "claude":
+		sess.Agent = "codex"
 	}
 
 	lf, err := s.lock()

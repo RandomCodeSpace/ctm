@@ -305,23 +305,28 @@ func TestMigrationPlan_MatchesSchemaVersion(t *testing.T) {
 	}
 }
 
-// TestNormalizeAgent_DefaultsCodex covers the read-side helper. Empty
-// values default to "codex" (the post-claude-removal default); legacy
-// "claude" values are also remapped to "codex" so a stale Session
-// never surfaces as an agent.For miss at the call site. Other agent
-// names pass through verbatim.
-func TestNormalizeAgent_DefaultsCodex(t *testing.T) {
+// TestNormalizeAgent covers the read-side helper. Empty values default
+// to DefaultAgent ("hermes" post-default-flip); legacy "claude" values
+// are remapped to "codex" (the v2→v3 on-disk migration target — NOT
+// DefaultAgent, by design, so the default flip doesn't silently
+// retarget historical claude sessions). Other agent names pass
+// through verbatim.
+func TestNormalizeAgent(t *testing.T) {
 	s := &session.Session{}
-	if got := s.NormalizeAgent(); got != "codex" {
-		t.Fatalf("NormalizeAgent on zero-value = %q, want codex", got)
+	if got := s.NormalizeAgent(); got != "hermes" {
+		t.Fatalf("NormalizeAgent on zero-value = %q, want hermes", got)
 	}
 	s.Agent = "claude"
 	if got := s.NormalizeAgent(); got != "codex" {
-		t.Fatalf("NormalizeAgent(claude) = %q, want codex (legacy remap)", got)
+		t.Fatalf("NormalizeAgent(claude) = %q, want codex (legacy remap, not DefaultAgent)", got)
 	}
 	s.Agent = "codex"
 	if got := s.NormalizeAgent(); got != "codex" {
 		t.Fatalf("NormalizeAgent(codex) = %q, want codex", got)
+	}
+	s.Agent = "hermes"
+	if got := s.NormalizeAgent(); got != "hermes" {
+		t.Fatalf("NormalizeAgent(hermes) = %q, want hermes", got)
 	}
 	s.Agent = "opencode"
 	if got := s.NormalizeAgent(); got != "opencode" {

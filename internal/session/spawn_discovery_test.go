@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/RandomCodeSpace/ctm/internal/agent/codex" // register codex
+	_ "github.com/RandomCodeSpace/ctm/internal/agent/codex"  // register codex
+	_ "github.com/RandomCodeSpace/ctm/internal/agent/hermes" // register hermes (DefaultAgent)
 	"github.com/RandomCodeSpace/ctm/internal/session"
 )
 
@@ -59,6 +60,7 @@ func TestYolo_DiscoveryStampsAgentSessionID(t *testing.T) {
 	sess, err := session.Yolo(session.SpawnOpts{
 		Name:                "discsess",
 		Workdir:             wd,
+		Agent:               "codex", // this test exercises codex rollout-file discovery specifically
 		Tmux:                tmux,
 		Store:               store,
 		OnDiscoveryComplete: func() { close(done) },
@@ -110,6 +112,7 @@ func TestYolo_DiscoveryTimeoutLeavesStoreRowEmpty(t *testing.T) {
 	if _, err := session.Yolo(session.SpawnOpts{
 		Name:                "timeoutsess",
 		Workdir:             wd,
+		Agent:               "codex", // this test exercises the codex no-rollout/timeout path
 		Tmux:                tmux,
 		Store:               store,
 		OnDiscoveryComplete: func() { close(done) },

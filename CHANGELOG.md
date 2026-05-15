@@ -38,6 +38,12 @@ generated notes plus the signed checksums — see
 
 ### Changed
 
+- **Default agent flipped from `codex` to `hermes`.** `ctm new` / `ctm yolo`
+  without an explicit `--agent` flag now spawn Hermes Agent. Existing sessions
+  on disk keep whatever agent they were created with — only NEW sessions
+  default to hermes. Legacy `claude` rows continue to migrate to `codex` (not
+  the new default) in both `state.go` Save and NormalizeAgent, so the flip
+  cannot silently retarget historical conversations.
 - `internal/config/config.go` schema bumped to v2. Existing
   `config.json` files with `required_in_path: ["claude", …]` are
   migrated to `["codex", …]` on next `ctm` invocation. User

@@ -27,7 +27,8 @@ Download the prebuilt binary for your platform (no Go toolchain needed):
 curl -LO https://github.com/RandomCodeSpace/ctm/releases/latest/download/ctm-$(curl -s https://api.github.com/repos/RandomCodeSpace/ctm/releases/latest | jq -r .tag_name)-linux-amd64.tar.gz
 tar xzf ctm-*-linux-amd64.tar.gz && sudo mv ctm-*/ctm /usr/local/bin/
 
-ctm                    # launches tmux + codex; drop SSH, reattach anytime
+ctm                    # launches tmux + hermes (default agent); drop SSH, reattach anytime
+ctm new --agent codex  # opt back into codex per-session
 ctm last               # one-word reconnect from your phone
 ```
 
@@ -57,7 +58,7 @@ codex 0.130.0  ~/projects/ctm  ●
 - **YOLO mode.** Auto-commits a git checkpoint before launching with `codex --sandbox danger-full-access`, so you can always roll back.
 - **Preflight health checks.** Env vars, PATH, workdir, tmux session, codex process — cached for 60 s to keep mobile reconnects snappy.
 - **Tight lifecycle coupling.** When codex exits, the tmux session dies. No stuck bash shells, no zombie tabs.
-- **Multi-agent.** Codex is the default; pass `--agent hermes` to `ctm new` or `ctm yolo` to spawn [Hermes Agent](https://hermes-agent.dev) instead. New agents plug in via `internal/agent.Register` without touching call sites.
+- **Multi-agent.** [Hermes Agent](https://hermes-agent.dev) is the default; pass `--agent codex` to `ctm new` or `ctm yolo` to spawn codex instead. New agents plug in via `internal/agent.Register` without touching call sites.
 - **Crash-safe state.** Atomic writes, flock-based locking, strict JSON decode with self-healing strip-to-.bak, `schema_version` + startup migrations on `sessions.json` / `config.json`.
 - **Zero non-tmux runtime deps.** Pure Go throughout. No `jq`, `pgrep`, `grep`, or `uuidgen` required.
 
@@ -92,7 +93,7 @@ go install github.com/RandomCodeSpace/ctm@latest
 
 ### Post-install
 
-No extra setup step is required — the first time you run any codex-launching command (`ctm`, `ctm <name>`, `ctm new`, `ctm yolo`), ctm bootstraps `~/.config/ctm/` with sensible defaults, regenerates `tmux.conf` on every launch, and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
+No extra setup step is required — the first time you run any agent-launching command (`ctm`, `ctm <name>`, `ctm new`, `ctm yolo`), ctm bootstraps `~/.config/ctm/` with sensible defaults, regenerates `tmux.conf` on every launch, and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
 
 If you prefer an explicit setup step (or want the cc-session migration to run), `ctm install` still does the same work upfront.
 
@@ -172,7 +173,7 @@ Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `c
 
 | Command | Description |
 |---|---|
-| `ctm` | Attach to the default session (`codex`). Creates it if missing. |
+| `ctm` | Attach to the default session (`hermes`). Creates it if missing. |
 | `ctm <name>` | Attach to a named session, or create it. |
 | `ctm cc` | Shorthand for attaching to `cc`. |
 | `ctm new <name>` | Create a new session in a specific workdir. |
