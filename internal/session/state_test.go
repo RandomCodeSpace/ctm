@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -288,8 +289,9 @@ func TestSaveStampsSchemaVersion(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if v := string(raw["schema_version"]); v != "1" {
-		t.Errorf("sessions.json schema_version = %s, want 1", v)
+	want := strconv.Itoa(session.SchemaVersion)
+	if v := string(raw["schema_version"]); v != want {
+		t.Errorf("sessions.json schema_version = %s, want %s", v, want)
 	}
 }
 
@@ -300,6 +302,30 @@ func TestMigrationPlan_MatchesSchemaVersion(t *testing.T) {
 	}
 	if len(p.Steps) != session.SchemaVersion {
 		t.Errorf("MigrationPlan has %d steps, want %d", len(p.Steps), session.SchemaVersion)
+	}
+}
+
+// TestNormalizeAgent_DefaultsCodex covers the read-side helper. Empty
+// values default to "codex" (the post-claude-removal default); legacy
+// "claude" values are also remapped to "codex" so a stale Session
+// never surfaces as an agent.For miss at the call site. Other agent
+// names pass through verbatim.
+func TestNormalizeAgent_DefaultsCodex(t *testing.T) {
+	s := &session.Session{}
+	if got := s.NormalizeAgent(); got != "codex" {
+		t.Fatalf("NormalizeAgent on zero-value = %q, want codex", got)
+	}
+	s.Agent = "claude"
+	if got := s.NormalizeAgent(); got != "codex" {
+		t.Fatalf("NormalizeAgent(claude) = %q, want codex (legacy remap)", got)
+	}
+	s.Agent = "codex"
+	if got := s.NormalizeAgent(); got != "codex" {
+		t.Fatalf("NormalizeAgent(codex) = %q, want codex", got)
+	}
+	s.Agent = "opencode"
+	if got := s.NormalizeAgent(); got != "opencode" {
+		t.Fatalf("NormalizeAgent(opencode) = %q, want opencode (forward-compat)", got)
 	}
 }
 

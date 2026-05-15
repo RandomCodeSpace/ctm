@@ -114,166 +114,61 @@ jobs:
           }
 
           # ─────────────────────────────────────────────────────────────
-          # Bucket 1: typescript:S6759 — "Mark props as read-only"
-          # The codebase deliberately does not adopt Readonly<Props>; this
-          # is a project-wide style choice, not a per-component miss.
-          KEYS=$(fetch_keys "typescript:S6759")
-          bulk_accept "S6759 readonly-props" "${KEYS}" \
-            "Project style: props interfaces are not wrapped in Readonly<>. Deliberate — accepted."
-
-          # Bucket 2: typescript:S6819 — "Use <output> instead of role=status"
-          # The role=status pattern is acceptable and used consistently
-          # for transient status text; <output> is not adopted project-wide.
-          KEYS=$(fetch_keys "typescript:S6819")
-          bulk_accept "S6819 role-status" "${KEYS}" \
-            "role=status is the established pattern for transient status text; <output> not adopted. Accepted."
-
-          # Bucket 3: typescript:S3358 — nested ternaries
-          # All remaining occurrences are inline JSX render expressions
-          # where extracting helpers would harm readability.
-          KEYS=$(fetch_keys "typescript:S3358")
-          bulk_accept "S3358 nested-ternary" "${KEYS}" \
-            "Inline JSX render — extracting a helper hurts readability more than the nesting. Accepted."
-
-          # Bucket 4: typescript:S6571 — redundant union members
-          # Most are deliberate "string | undefined" / "T | null" shapes
-          # used as explicit escape hatches at API boundaries.
-          KEYS=$(fetch_keys "typescript:S6571")
-          bulk_accept "S6571 redundant-type" "${KEYS}" \
-            "Union members are intentional escape hatches at API boundaries. Accepted."
-
-          # Bucket 5: typescript:S6754 — useState destructuring style
-          # The chosen form (no destructuring of the setter) is intentional
-          # in a couple of one-shot setters; not worth churn.
-          KEYS=$(fetch_keys "typescript:S6754")
-          bulk_accept "S6754 useState-style" "${KEYS}" \
-            "Chosen form is intentional for these one-shot setters. Accepted."
-
-          # Bucket 6: typescript:S6479 — array-index keys
-          # Used only where the list is statically ordered (timestamps in
-          # row keys, doctor checks). React reconciliation is unaffected.
-          KEYS=$(fetch_keys "typescript:S6479")
-          bulk_accept "S6479 array-index-key" "${KEYS}" \
-            "Lists are append-only with stable per-row prefixes; index suffix is fine. Accepted."
-
-          # Bucket 7: typescript:S3735 — `void` operator
-          # We use `void` to discard an awaited Promise result intentionally
-          # (fire-and-forget within useEffect / event handlers).
-          KEYS=$(fetch_keys "typescript:S3735")
-          bulk_accept "S3735 void-operator" "${KEYS}" \
-            "Fire-and-forget Promise in event handler / useEffect; void is the documented escape. Accepted."
-
-          # Bucket 8: typescript:S1874 + javascript:S1874 — use of deprecated APIs
-          # The deprecations flagged are in third-party libs (react-router 6→7
-          # transition residue) where the migration target also fires Sonar.
-          KEYS=$(fetch_keys "typescript:S1874,javascript:S1874")
-          bulk_accept "S1874 deprecation" "${KEYS}" \
-            "Deprecation is in transitional library API; migration tracked separately. Accepted."
-
-          # Bucket 9: typescript:S7763 — re-export shorthand
-          # Existing shape is more grep-able for the codebase's small surface;
-          # the rule's preferred form is fine but not worth churn.
-          KEYS=$(fetch_keys "typescript:S7763")
-          bulk_accept "S7763 export-from" "${KEYS}" \
-            "Existing form is intentional for symbol grep clarity. Accepted."
-
-          # Bucket 10: typescript:S7718 — prefer Set#has over Array#includes
-          # Inputs are O(<10) — Set construction overhead exceeds savings.
-          KEYS=$(fetch_keys "typescript:S7718")
-          bulk_accept "S7718 set-has" "${KEYS}" \
-            "Lookup arrays have <10 elements; Array#includes is faster. Accepted."
-
-          # Bucket 11: typescript:S6772 — "ambiguous spacing"
-          # Remaining occurrences are inside <code>/<span> tag trees where
-          # the chosen form is intentional. Reliability-impact ones already fixed.
-          KEYS=$(fetch_keys "typescript:S6772")
-          bulk_accept "S6772 ambiguous-spacing" "${KEYS}" \
-            "Spacing is intentional inside the affected text/code spans. Accepted."
-
-          # Bucket 12: godre:S8205 — named struct types
+          # Bucket 1: godre:S8205 — named struct types
           # Anonymous struct types are intentional in test scaffolding and
           # request-decode shapes that aren't reused.
           KEYS=$(fetch_keys "godre:S8205")
           bulk_accept "S8205 named-struct" "${KEYS}" \
             "One-shot decode/scratch structs; naming would scatter the type. Accepted."
 
-          # Bucket 13: godre:S8196 — interface naming
+          # Bucket 2: godre:S8196 — interface naming
           # Existing names are domain-aligned (InputSessionSource, ProjRefresher).
           # Renaming would touch a wide blast radius for a stylistic nit.
           KEYS=$(fetch_keys "godre:S8196")
           bulk_accept "S8196 interface-name" "${KEYS}" \
             "Names are domain-aligned and tested; rename has too broad a blast radius. Accepted."
 
-          # Bucket 14: godre:S8193 — receiver naming
+          # Bucket 3: godre:S8193 — receiver naming
           # Receiver names are short and consistent within each type;
           # the rule's "first-letter" preference doesn't add value here.
           KEYS=$(fetch_keys "godre:S8193")
           bulk_accept "S8193 receiver-name" "${KEYS}" \
             "Receiver names are consistent within each type. Accepted."
 
-          # Bucket 15: godre:S8242 — context.Context as struct field
-          # Used in a long-lived daemon component where ctx genuinely lives
-          # on the struct (cancellation propagates through the lifecycle).
+          # Bucket 4: godre:S8242 — context.Context as struct field
+          # Used in long-lived components where ctx genuinely lives on
+          # the struct (cancellation propagates through the lifecycle).
           KEYS=$(fetch_keys "godre:S8242")
           bulk_accept "S8242 ctx-field" "${KEYS}" \
-            "Daemon-scoped ctx travels with the struct's lifecycle. Accepted."
+            "Lifecycle-scoped ctx travels with the struct. Accepted."
 
-          # Bucket 16: go:S107 + go:S117 — too many params / variable name
-          # Existing shape mirrors HTTP handler / cobra signatures.
+          # Bucket 5: go:S107 + go:S117 — too many params / variable name
+          # Existing shape mirrors cobra signatures.
           KEYS=$(fetch_keys "go:S107,go:S117")
           bulk_accept "S107/S117 signature" "${KEYS}" \
-            "Signature mirrors handler / cobra contracts. Accepted."
+            "Signature mirrors cobra contracts. Accepted."
 
-          # Bucket 17: typescript:S6582 — optional chain
-          # Already fixed where applicable; remaining are intentional
-          # truthiness checks (e.g. `&& obj.field` where obj is required).
-          KEYS=$(fetch_keys "typescript:S6582")
-          bulk_accept "S6582 optional-chain" "${KEYS}" \
-            "Remaining occurrences are intentional truthiness checks on required fields. Accepted."
-
-          # Bucket 18: typescript:S4624 — nested template literals
-          # Used for compact JSX label composition; collapsing harms clarity.
-          KEYS=$(fetch_keys "typescript:S4624")
-          bulk_accept "S4624 nested-template" "${KEYS}" \
-            "Compact JSX label composition; collapsing harms clarity. Accepted."
-
-          # Bucket 19: typescript:S6822 — implicit list role (remaining only)
-          # Reliability-impact occurrences fixed in code; remaining list
-          # elements are inside scrollable card bodies where the parent
-          # treats them as decorative.
-          KEYS=$(fetch_keys "typescript:S6822")
-          bulk_accept "S6822 implicit-list" "${KEYS}" \
-            "Remaining list elements are decorative within scrollable card bodies. Accepted."
-
-          # Bucket 20: typescript:S1871 — duplicate case body
-          # The duplicate clauses document distinct semantic categories
-          # that happen to dispatch to the same code path.
-          KEYS=$(fetch_keys "typescript:S1871")
-          bulk_accept "S1871 duplicate-case" "${KEYS}" \
-            "Cases document distinct semantic categories sharing one code path. Accepted."
-
-          # Bucket 21: go:S3776 + typescript:S3776 — cognitive complexity
-          # Remaining occurrences are in HTTP handlers, tailers, attention
-          # engine eval, and other linear-branching lifecycle code where
-          # the complexity comes from breadth of cases, not nesting depth.
+          # Bucket 6: go:S3776 — cognitive complexity
+          # Remaining occurrences are in tailers, attention engine eval,
+          # and other linear-branching lifecycle code where the
+          # complexity comes from breadth of cases, not nesting depth.
           # Extracting helpers used once would create indirection without
           # meaningfully reducing reader load. Accepted as a project-wide
           # judgement call rather than per-function.
-          KEYS=$(fetch_keys "go:S3776,typescript:S3776")
+          KEYS=$(fetch_keys "go:S3776")
           bulk_accept "S3776 cognitive-complexity" "${KEYS}" \
-            "Production handlers / engines: complexity is breadth of cases, not nesting. Extracting single-use helpers harms readability. Accepted."
+            "Production engines: complexity is breadth of cases, not nesting. Extracting single-use helpers harms readability. Accepted."
 
           # ─────────────────────────────────────────────────────────────
-          # Bucket 22: ALL remaining smells in *_test.go / *.test.ts(x)
+          # Bucket 7: ALL remaining smells in *_test.go
           # Test code is intentionally dense (table-driven cases, mock
-          # plumbing, deep ternaries to express expected outputs). The
-          # cognitive-complexity / readonly / etc. rules are noise here.
+          # plumbing). The cognitive-complexity / etc. rules are noise here.
           test_keys=$(curl -sSf -u "${SONAR_TOKEN}:" \
             "${SONAR_HOST}/api/issues/search?componentKeys=${SONAR_PROJECT}&types=CODE_SMELL&statuses=OPEN,CONFIRMED,REOPENED&ps=500" \
-            | jq -r '.issues[] | select(.component | test("(_test\\.go|\\.test\\.tsx?)$")) | .key' \
+            | jq -r '.issues[] | select(.component | test("_test\\.go$")) | .key' \
             | paste -sd, -)
           bulk_accept "test-file smells" "${test_keys}" \
-            "Test code: table-driven density / mock plumbing / explicit ternaries are by design. Accepted."
+            "Test code: table-driven density / mock plumbing are by design. Accepted."
 
           # ─────────────────────────────────────────────────────────────
           # FALSE POSITIVE bucket — the rule has misfired here.

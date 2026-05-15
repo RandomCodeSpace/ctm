@@ -17,8 +17,8 @@ func withTempHome(t *testing.T) string {
 	return tmp
 }
 
-func TestEnsureSetupCreatesAllArtifacts(t *testing.T) {
-	home := withTempHome(t)
+func TestEnsureSetupCreatesConfigAndTmuxConf(t *testing.T) {
+	withTempHome(t)
 
 	cfg, err := ensureSetup()
 	if err != nil {
@@ -31,133 +31,69 @@ func TestEnsureSetupCreatesAllArtifacts(t *testing.T) {
 		t.Errorf("expected default scrollback lines, got %d", cfg.ScrollbackLines)
 	}
 
-	cfgDir := filepath.Join(home, ".config", "ctm")
-	wantFiles := []string{
-		config.ConfigPath(),
-		config.TmuxConfPath(),
-		config.ClaudeOverlayPath(),
-		config.ClaudeEnvPath(),
-	}
-	for _, p := range wantFiles {
+	for _, p := range []string{config.ConfigPath(), config.TmuxConfPath()} {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("expected %s to exist: %v", p, err)
 		}
 	}
-
-	logs := filepath.Join(cfgDir, "logs")
-	if st, err := os.Stat(logs); err != nil || !st.IsDir() {
-		t.Errorf("expected %s to be a directory", logs)
-	}
 }
 
-func TestEnsureSetupIdempotent(t *testing.T) {
+func TestEnsureSetupIsIdempotent(t *testing.T) {
 	withTempHome(t)
+
 	if _, err := ensureSetup(); err != nil {
-		t.Fatalf("first call: %v", err)
+		t.Fatalf("first ensureSetup: %v", err)
 	}
 
-	overlayPath := config.ClaudeOverlayPath()
-	marker := []byte("// user edit — must survive bootstrap\n")
-	orig, err := os.ReadFile(overlayPath)
+	cfgPath := config.ConfigPath()
+	stat1, err := os.Stat(cfgPath)
 	if err != nil {
-		t.Fatal(err)
-	}
-	edited := append(orig, marker...)
-	if err := os.WriteFile(overlayPath, edited, 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := ensureSetup(); err != nil {
-		t.Fatalf("second call: %v", err)
+		t.Fatalf("second ensureSetup: %v", err)
 	}
-	after, err := os.ReadFile(overlayPath)
+
+	stat2, err := os.Stat(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(after) != string(edited) {
-		t.Errorf("ensureSetup clobbered overlay edits\nbefore: %q\nafter:  %q", edited, after)
+	if stat1.Size() != stat2.Size() {
+		t.Errorf("config.json size changed across idempotent calls (%d → %d)", stat1.Size(), stat2.Size())
 	}
 }
 
-func TestEnsureSetupAliasesIdempotent(t *testing.T) {
-	home := withTempHome(t)
-	bashrc := filepath.Join(home, ".bashrc")
-	// Seed a bashrc — ensureAliases only writes to existing rc files.
-	if err := os.WriteFile(bashrc, []byte("# existing rc\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := ensureSetup(); err != nil {
-		t.Fatal(err)
-	}
-	first, err := os.ReadFile(bashrc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ensureSetup(); err != nil {
-		t.Fatal(err)
-	}
-	second, err := os.ReadFile(bashrc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(first) != string(second) {
-		t.Errorf("bashrc changed on second bootstrap:\nfirst:  %q\nsecond: %q", first, second)
-	}
-	if !containsAliasMarker(string(first)) {
-		t.Errorf("expected alias marker injected, got:\n%s", first)
-	}
-}
-
-func TestEnsureOverlayCreatesWithHookCommands(t *testing.T) {
+func TestEnsureSetupWritesDefaultConfigContents(t *testing.T) {
 	withTempHome(t)
-	if err := ensureOverlaySidecars(); err != nil {
+
+	if _, err := ensureSetup(); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(config.ClaudeOverlayPath())
+
+	cfg, err := config.Load(config.ConfigPath())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Load: %v", err)
 	}
-	got := string(data)
-	for _, want := range []string{`"spinnerTipsEnabled": false`, "statusline", "log-tool-use"} {
-		if !contains(got, want) {
-			t.Errorf("overlay missing %q:\n%s", want, got)
+	hasCodex := false
+	for _, p := range cfg.RequiredInPath {
+		if p == "codex" {
+			hasCodex = true
 		}
 	}
-}
-
-func TestOverlayAndEnvFilePermsAre0600(t *testing.T) {
-	withTempHome(t)
-	if err := ensureOverlaySidecars(); err != nil {
-		t.Fatal(err)
+	if !hasCodex {
+		t.Errorf("expected default RequiredInPath to include \"codex\", got %v", cfg.RequiredInPath)
 	}
-	for _, path := range []string{
-		config.ClaudeOverlayPath(),
-		config.ClaudeEnvPath(),
+
+	// Verify no stray overlay/env files were created — those features
+	// were removed when claude support was dropped.
+	cfgDir := filepath.Dir(config.ConfigPath())
+	for _, leaked := range []string{
+		filepath.Join(cfgDir, "claude-overlay.json"),
+		filepath.Join(cfgDir, "claude-env.json"),
 	} {
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("stat %s: %v", path, err)
-		}
-		if mode := info.Mode().Perm(); mode != 0600 {
-			t.Errorf("%s mode = %v, want 0600", path, mode)
+		if _, err := os.Stat(leaked); err == nil {
+			t.Errorf("unexpected legacy file present: %s", leaked)
 		}
 	}
-}
-
-func contains(haystack, needle string) bool {
-	return len(haystack) >= len(needle) && indexOf(haystack, needle) >= 0
-}
-
-func containsAliasMarker(s string) bool {
-	return indexOf(s, "# --- ctm aliases START ---") >= 0
-}
-
-func indexOf(haystack, needle string) int {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return i
-		}
-	}
-	return -1
 }

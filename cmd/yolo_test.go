@@ -45,8 +45,8 @@ func TestShouldResumeExisting(t *testing.T) {
 		},
 		{
 			// Regression: previously this case required tc.HasSession(name) to
-			// also be true, which caused `ctm yolo <name>` after claude exited
-			// (tmux dies with claude) to drop the stored UUID and start fresh.
+			// also be true, which caused `ctm yolo <name>` after the agent exited
+			// (tmux dies with the agent) to drop the stored UUID and start fresh.
 			name:          "yolo session whose tmux died still resumes",
 			sess:          &session.Session{Mode: "yolo"},
 			requestedMode: "yolo",

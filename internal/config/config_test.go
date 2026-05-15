@@ -2,11 +2,15 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/RandomCodeSpace/ctm/internal/migrate"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -16,7 +20,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("RequiredEnv = %v, want [PATH HOME]", cfg.RequiredEnv)
 	}
 
-	expectedInPath := []string{"claude", "node", "go", "bun"}
+	expectedInPath := []string{"codex", "node", "go", "bun"}
 	if len(cfg.RequiredInPath) != len(expectedInPath) {
 		t.Errorf("RequiredInPath len = %d, want %d", len(cfg.RequiredInPath), len(expectedInPath))
 	} else {
@@ -142,8 +146,9 @@ func TestLoadCreatesFileWithSchemaVersion(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if v := string(raw["schema_version"]); v != "1" {
-		t.Errorf("freshly-created config.json schema_version = %s, want 1", v)
+	wantSV := fmt.Sprintf("%d", SchemaVersion)
+	if v := string(raw["schema_version"]); v != wantSV {
+		t.Errorf("freshly-created config.json schema_version = %s, want %s", v, wantSV)
 	}
 }
 
@@ -162,8 +167,9 @@ func TestWriteForceStampsSchemaVersion(t *testing.T) {
 	data, _ := os.ReadFile(path)
 	var raw map[string]json.RawMessage
 	_ = json.Unmarshal(data, &raw)
-	if v := string(raw["schema_version"]); v != "1" {
-		t.Errorf("write stamped schema_version = %s, want 1", v)
+	wantSV := fmt.Sprintf("%d", SchemaVersion)
+	if v := string(raw["schema_version"]); v != wantSV {
+		t.Errorf("write stamped schema_version = %s, want %s", v, wantSV)
 	}
 }
 
@@ -223,140 +229,6 @@ func TestLogPolicy_ExplicitValuesRespected(t *testing.T) {
 	}
 }
 
-func TestDefault_PopulatesServeDefaults(t *testing.T) {
-	cfg := Default()
-	if cfg.Serve.Port != DefaultServePort {
-		t.Errorf("Serve.Port = %d, want %d", cfg.Serve.Port, DefaultServePort)
-	}
-	want := AttentionThresholds{
-		ErrorRatePct:         DefaultAttentionErrorRatePct,
-		ErrorRateWindow:      DefaultAttentionErrorRateWindow,
-		IdleMinutes:          DefaultAttentionIdleMinutes,
-		QuotaPct:             DefaultAttentionQuotaPct,
-		ContextPct:           DefaultAttentionContextPct,
-		YoloUncheckedMinutes: DefaultAttentionYoloUncheckedMinutes,
-	}
-	if cfg.Serve.Attention != want {
-		t.Errorf("Serve.Attention = %+v, want %+v", cfg.Serve.Attention, want)
-	}
-	// Optional/user-supplied fields must stay empty by default.
-	if cfg.Serve.BearerToken != "" || cfg.Serve.WebhookURL != "" ||
-		cfg.Serve.WebhookAuth != "" || cfg.Serve.StatuslineDumpDir != "" {
-		t.Errorf("optional serve fields populated unexpectedly: %+v", cfg.Serve)
-	}
-}
-
-func TestAttentionThresholds_ResolvedFillsZeros(t *testing.T) {
-	got := AttentionThresholds{}.Resolved()
-	want := AttentionThresholds{
-		ErrorRatePct:         DefaultAttentionErrorRatePct,
-		ErrorRateWindow:      DefaultAttentionErrorRateWindow,
-		IdleMinutes:          DefaultAttentionIdleMinutes,
-		QuotaPct:             DefaultAttentionQuotaPct,
-		ContextPct:           DefaultAttentionContextPct,
-		YoloUncheckedMinutes: DefaultAttentionYoloUncheckedMinutes,
-	}
-	if got != want {
-		t.Errorf("Resolved() on zero = %+v, want %+v", got, want)
-	}
-}
-
-func TestAttentionThresholds_ResolvedPreservesExplicit(t *testing.T) {
-	in := AttentionThresholds{
-		ErrorRatePct:         1,
-		ErrorRateWindow:      2,
-		IdleMinutes:          3,
-		QuotaPct:             4,
-		ContextPct:           5,
-		YoloUncheckedMinutes: 6,
-	}
-	if got := in.Resolved(); got != in {
-		t.Errorf("Resolved() altered explicit values: %+v -> %+v", in, got)
-	}
-}
-
-func TestServeConfig_ResolvedPortFallsBackToDefault(t *testing.T) {
-	if got := (ServeConfig{}).ResolvedPort(); got != DefaultServePort {
-		t.Errorf("ResolvedPort() zero = %d, want %d", got, DefaultServePort)
-	}
-	if got := (ServeConfig{Port: 9999}).ResolvedPort(); got != 9999 {
-		t.Errorf("ResolvedPort() explicit = %d, want 9999", got)
-	}
-}
-
-func TestLoad_ConfigWithoutServeKeyStillParses(t *testing.T) {
-	// Existing v0.1 config.json files predate the serve block. Strict
-	// decoding tolerates missing subkeys (only unknown ones fail), so
-	// these must load clean with zero-valued Serve + no backup written.
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	legacy := `{
-  "schema_version": 1,
-  "scrollback_lines": 4242,
-  "default_mode": "safe"
-}`
-	if err := os.WriteFile(path, []byte(legacy), 0600); err != nil {
-		t.Fatalf("setup: %v", err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load on pre-serve config: %v", err)
-	}
-	if cfg.ScrollbackLines != 4242 {
-		t.Errorf("ScrollbackLines = %d, want 4242", cfg.ScrollbackLines)
-	}
-	if cfg.Serve != (ServeConfig{}) {
-		t.Errorf("Serve should be zero-valued on legacy load, got %+v", cfg.Serve)
-	}
-	// Accessors must still return sensible defaults on a zero Serve.
-	if got := cfg.Serve.ResolvedPort(); got != DefaultServePort {
-		t.Errorf("ResolvedPort() on legacy = %d, want %d", got, DefaultServePort)
-	}
-
-	// No unknown-keys backup should have been produced — the key was
-	// absent, not unknown.
-	entries, _ := os.ReadDir(dir)
-	for _, e := range entries {
-		if strings.Contains(e.Name(), ".bak.unknowns.") {
-			t.Errorf("unexpected unknowns backup created: %s", e.Name())
-		}
-	}
-}
-
-func TestLoad_ServeBlockRoundTrips(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-
-	orig := Default()
-	orig.Serve = ServeConfig{
-		Port:              40000,
-		BearerToken:       "tok-abc",
-		WebhookURL:        "https://example.invalid/hook",
-		WebhookAuth:       "Bearer xyz",
-		StatuslineDumpDir: "/var/tmp/ctm-sl",
-		Attention: AttentionThresholds{
-			ErrorRatePct:         33,
-			ErrorRateWindow:      50,
-			IdleMinutes:          7,
-			QuotaPct:             90,
-			ContextPct:           95,
-			YoloUncheckedMinutes: 15,
-		},
-	}
-
-	if err := write(path, orig); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	loaded, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if loaded.Serve != orig.Serve {
-		t.Errorf("Serve round-trip mismatch:\n got  = %+v\n want = %+v", loaded.Serve, orig.Serve)
-	}
-}
 
 func TestLoad_StripsUnknownKeysAndBacksUp(t *testing.T) {
 	dir := t.TempDir()
@@ -402,5 +274,96 @@ func TestLoad_StripsUnknownKeysAndBacksUp(t *testing.T) {
 	after, _ := os.ReadFile(path)
 	if strings.Contains(string(after), `"typo"`) {
 		t.Errorf("stripped key survived rewrite: %s", after)
+	}
+}
+
+// TestMigration_V1ToV2_RewritesClaudeInRequiredPath verifies the
+// v1→v2 step: a legacy `required_in_path` array containing "claude"
+// gets that entry rewritten to "codex" while preserving every other
+// element exactly.
+func TestMigration_V1ToV2_RewritesClaudeInRequiredPath(t *testing.T) {
+	in := map[string]json.RawMessage{
+		"required_in_path": json.RawMessage(`["claude","node","go","bun"]`),
+	}
+	if err := rewriteRequiredPathClaude(in); err != nil {
+		t.Fatalf("rewriteRequiredPathClaude: %v", err)
+	}
+	var got []string
+	if err := json.Unmarshal(in["required_in_path"], &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := []string{"codex", "node", "go", "bun"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("required_in_path = %v, want %v", got, want)
+	}
+}
+
+// TestMigration_V1ToV2_PreservesUserAdditions verifies that customized
+// entries beyond the original default set survive the migration: only
+// the literal "claude" is rewritten.
+func TestMigration_V1ToV2_PreservesUserAdditions(t *testing.T) {
+	in := map[string]json.RawMessage{
+		"required_in_path": json.RawMessage(`["bun","claude","rust","node"]`),
+	}
+	if err := rewriteRequiredPathClaude(in); err != nil {
+		t.Fatalf("rewriteRequiredPathClaude: %v", err)
+	}
+	var got []string
+	_ = json.Unmarshal(in["required_in_path"], &got)
+	want := []string{"bun", "codex", "rust", "node"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("required_in_path = %v, want %v", got, want)
+	}
+}
+
+// TestMigration_V1ToV2_Idempotent: running the step twice or against
+// an already-migrated config is a no-op.
+func TestMigration_V1ToV2_Idempotent(t *testing.T) {
+	in := map[string]json.RawMessage{
+		"required_in_path": json.RawMessage(`["codex","node","go","bun"]`),
+	}
+	if err := rewriteRequiredPathClaude(in); err != nil {
+		t.Fatalf("rewriteRequiredPathClaude: %v", err)
+	}
+	var got []string
+	_ = json.Unmarshal(in["required_in_path"], &got)
+	want := []string{"codex", "node", "go", "bun"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("required_in_path = %v, want %v (no-op expected)", got, want)
+	}
+}
+
+// TestMigration_V1ToV2_FullPlanRewritesLegacyConfig verifies end-to-
+// end behavior via the migrate runner: a v1 config.json with
+// `claude` in required_in_path lands at v2 with `codex`, no backup.
+func TestMigration_V1ToV2_FullPlanRewritesLegacyConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	legacy := `{
+  "schema_version": 1,
+  "scrollback_lines": 7777,
+  "default_mode": "safe",
+  "required_in_path": ["claude","node","go","bun"]
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if _, err := migrate.Run(path, MigrationPlan()); err != nil {
+		t.Fatalf("migrate.Run: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	var sv int
+	_ = json.Unmarshal(obj["schema_version"], &sv)
+	if sv != 2 {
+		t.Fatalf("schema_version = %d, want 2", sv)
+	}
+	var got []string
+	_ = json.Unmarshal(obj["required_in_path"], &got)
+	if !reflect.DeepEqual(got, []string{"codex", "node", "go", "bun"}) {
+		t.Fatalf("required_in_path post-migrate = %v", got)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/RandomCodeSpace/ctm/internal/agent"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/health"
 	"github.com/RandomCodeSpace/ctm/internal/output"
@@ -25,7 +26,7 @@ var checkCmd = &cobra.Command{
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
-	name := "claude"
+	name := session.DefaultAgent
 	if len(args) > 0 {
 		name = args[0]
 	}
@@ -84,11 +85,19 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		allPassed = false
 	}
 
-	// Claude process
-	claudeResult := health.CheckClaudeProcess(tc, name)
-	printCheckResult(out, claudeResult)
-	if !claudeResult.Passed() {
-		allPassed = false
+	// Agent process — only meaningful when we know which agent the
+	// session uses. A missing session row was already reported above
+	// via the workdir-result branch; skip the process check in that case.
+	if sessErr == nil {
+		procName := sess.NormalizeAgent()
+		if a, ok := agent.For(sess.NormalizeAgent()); ok {
+			procName = a.ProcessName()
+		}
+		procResult := health.CheckAgentProcess(tc, name, procName)
+		printCheckResult(out, procResult)
+		if !procResult.Passed() {
+			allPassed = false
+		}
 	}
 
 	// Summary

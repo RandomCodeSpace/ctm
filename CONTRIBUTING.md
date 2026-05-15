@@ -23,12 +23,11 @@ follow the process in [SECURITY.md](./SECURITY.md).
 3. **Tests are required for new logic.** SonarCloud's new-code
    coverage gate fails PRs that drop coverage below threshold. Match
    the existing test style in the package you're touching
-   (table-driven Go tests, vitest + React Testing Library on the UI).
+   (table-driven Go tests).
 4. **All checks must pass before merge:** `go vet`, `go build`,
-   `go test`, `pnpm exec tsc --noEmit`, `pnpm exec vitest run`,
-   SonarCloud quality gate, CodeQL, and OpenSSF Scorecard. CI runs
-   them automatically; locally you can run `make regression` for the
-   superset.
+   `go test`, SonarCloud quality gate, CodeQL, and OpenSSF
+   Scorecard. CI runs them automatically; locally you can run
+   `make regression` for the superset.
 5. **Conventional commit subjects.** Use the prefix that matches the
    change kind: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`,
    `test:`, `ci:`, `perf:`. The release workflow groups release notes
@@ -42,11 +41,9 @@ follow the process in [SECURITY.md](./SECURITY.md).
 | Area | Tool / convention |
 |---|---|
 | Go formatting | `gofmt -w` (run automatically by most editors) |
-| Go vet | `go vet -tags sqlite_fts5 ./...` — must be clean |
+| Go vet | `go vet ./...` — must be clean |
 | Go style | Standard Go review comments + Effective Go conventions |
-| TypeScript | `pnpm exec tsc --noEmit` — strict mode is on; no `any` without justification |
-| TS / React style | ESLint via the existing `ui/eslint.config.*` setup |
-| Test layers | unit (pure logic), integration (DB + tmux), e2e (Playwright); see `rules/testing.md` in your local Claude config if you have one |
+| Test layers | unit (pure logic) and integration (tmux + filesystem); see `rules/testing.md` in your local agent config if you have one |
 | File layout | Follow existing patterns. New `cmd/<x>.go` for cobra wiring + `cmd/<x>_runners.go` for integration-bound RunE bodies (see `cmd/yolo.go` ↔ `cmd/yolo_runners.go` for the split) |
 | Comments | Lead with *why* a non-obvious decision was made. Don't restate what the code does |
 | Dependency updates | Use `context7` MCP / vendor docs to find the latest compatible version; never guess. Permissive licenses only (MIT / Apache-2.0 / BSD) — flag GPL/AGPL for review |

@@ -37,7 +37,7 @@ set -g allow-rename off
 set -sg escape-time 10
 set -g monitor-activity on
 set -g visual-activity off
-# Focus events: lets apps inside tmux (claude, vim) see focus-in/out events,
+# Focus events: lets apps inside tmux (codex, vim) see focus-in/out events,
 # which improves redraw behavior and avoids stale cursor state on reattach.
 set -g focus-events on
 # OSC52: sync tmux copy-mode selections to system clipboard.

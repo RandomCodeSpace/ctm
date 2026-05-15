@@ -4,7 +4,7 @@
 
   "project_id": 12716,
   "name": "ctm",
-  "description": "Claude Tmux Manager — survive SSH drops, reattach from your phone.",
+  "description": "Codex Tmux Manager — survive SSH drops, reattach from your phone.",
   "homepage_url": "https://github.com/RandomCodeSpace/ctm",
   "repo_url": "https://github.com/RandomCodeSpace/ctm",
   "license": "MIT",
@@ -17,10 +17,9 @@
     "contributing_guide": "CONTRIBUTING.md",
     "vulnerability_report_process": "SECURITY.md",
     "release_notes": "CHANGELOG.md",
-    "build_reproducible": "Makefile + go build -tags sqlite_fts5 ./...",
+    "build_reproducible": "Makefile + go build ./...",
     "ci_workflow": ".github/workflows/ci.yml",
     "release_workflow": ".github/workflows/release.yml",
-    "code_scanning": ".github/workflows/codeql.yml",
     "supply_chain_scorecard": ".github/workflows/scorecard.yml",
     "static_analysis_sonar": "sonar-project.properties + SonarCloud quality gate",
     "bestpractices_lint": ".github/workflows/bestpractices.yml",
@@ -35,7 +34,7 @@
   },
 
   "description_good_status": "Met",
-  "description_good_justification": "README opens with: 'Claude Tmux Manager — survive SSH drops, reattach from your phone.'",
+  "description_good_justification": "README opens with: 'Codex Tmux Manager — survive SSH drops, reattach from your phone.'",
 
   "interact_status": "Met",
   "interact_justification": "GitHub Issues + Pull Requests are enabled.",
@@ -44,7 +43,7 @@
   "contribution_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md",
 
   "contribution_requirements_status": "Met",
-  "contribution_requirements_justification": "CONTRIBUTING.md documents PR requirements: branch naming, scoped PRs, tests required for new logic, conventional-commit subjects, all checks passing (go vet, go test -race, pnpm tsc --noEmit, pnpm vitest, SonarCloud, CodeQL, OpenSSF Scorecard). https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md#coding-standards",
+  "contribution_requirements_justification": "CONTRIBUTING.md documents PR requirements: branch naming, scoped PRs, tests required for new logic, conventional-commit subjects, all checks passing (go vet, go test -race, govulncheck, SonarCloud, OpenSSF Scorecard). https://github.com/RandomCodeSpace/ctm/blob/main/CONTRIBUTING.md#coding-standards",
 
   "floss_license_status": "Met",
   "floss_license_justification": "MIT License.",
@@ -56,7 +55,7 @@
   "license_location_justification": "https://github.com/RandomCodeSpace/ctm/blob/main/LICENSE",
 
   "documentation_interface_status": "Met",
-  "documentation_interface_justification": "README has a Commands section listing every external interface (yolo, safe, attach, kill, list, ctm serve, etc.).",
+  "documentation_interface_justification": "README has a Commands section listing every external interface (yolo, yolo!, safe, attach, kill, killall, last, ls, new, pick, rename, switch, detach, forget, doctor, check, install, uninstall, version).",
 
   "sites_https_status": "Met",
   "sites_https_justification": "All project URLs are GitHub-hosted and use HTTPS.",
@@ -122,25 +121,25 @@
   "vulnerability_report_response_justification": "Formal response targets in SECURITY.md: acknowledge within 14 days, initial assessment within 30 days, fix High/Critical within 60 days, default 90-day disclosure window.",
 
   "build_status": "Met",
-  "build_justification": "Standard `go build -tags sqlite_fts5` builds the binary; `pnpm build` builds the embedded UI.",
+  "build_justification": "Standard `go build ./...` builds the binary; `make build` is the documented entry point.",
 
   "build_common_tools_status": "Met",
-  "build_common_tools_justification": "Build uses Go 1.24+ and pnpm — both widely available, FLOSS, and free of registration.",
+  "build_common_tools_justification": "Build uses Go 1.25+ and the GNU `make` driver — both widely available, FLOSS, and free of registration.",
 
   "build_floss_tools_status": "Met",
-  "build_floss_tools_justification": "Build toolchain is entirely FLOSS (Go, pnpm, Node.js).",
+  "build_floss_tools_justification": "Build toolchain is entirely FLOSS (Go, GNU make).",
 
   "test_status": "Met",
-  "test_justification": "918 Go tests across 27 packages, 206 UI tests across 29 files.",
+  "test_justification": "336 Go tests across 19 packages exercise CLI helpers, the agent registry, codex-impl spawn/discover paths, session migrations, tmux client argv builders, and the integration smoke pack.",
 
   "test_invocation_status": "Met",
-  "test_invocation_justification": "README documents `go test -tags sqlite_fts5 ./...` and `pnpm exec vitest run`.",
+  "test_invocation_justification": "CONTRIBUTING.md documents `go test ./...` and `make regression` (race + govulncheck).",
 
   "test_most_status": "Met",
-  "test_most_justification": "85.2% line coverage measured by SonarCloud across Go + TypeScript.",
+  "test_most_justification": "Line coverage tracked via SonarCloud's Go quality gate; coverage data uploaded by .github/workflows/sonar.yml on every push.",
 
   "test_continuous_integration_status": "Met",
-  "test_continuous_integration_justification": "GitHub Actions runs Go build/test, UI typecheck/test, SonarCloud, CodeQL, and Scorecard on every push and PR.",
+  "test_continuous_integration_justification": "GitHub Actions runs Go build/test (ci.yml), SonarCloud (sonar.yml), and Scorecard (scorecard.yml) on every push and PR.",
 
   "test_policy_status": "Met",
   "test_policy_justification": "New features must ship with tests; SonarCloud's new-code coverage gate fails PRs that drop coverage below threshold.",
@@ -152,46 +151,46 @@
   "tests_documented_added_justification": "test_policy is enforced in PR review and by the coverage gate.",
 
   "warnings_status": "Met",
-  "warnings_justification": "go vet, gopls language-server checks, ESLint with strict TypeScript rules, and SonarCloud all run on every push.",
+  "warnings_justification": "go vet, gopls language-server checks, and SonarCloud all run on every push.",
 
   "warnings_fixed_status": "Met",
-  "warnings_fixed_justification": "Warnings surfaced by gopls / ESLint / Sonar are addressed (or explicitly Accepted with a justification) before merge.",
+  "warnings_fixed_justification": "Warnings surfaced by gopls or Sonar are addressed (or explicitly Accepted with a justification) before merge.",
 
   "warnings_strict_status": "Met",
-  "warnings_strict_justification": "TypeScript strict mode enabled in tsconfig.json; SonarCloud quality gate fails the build on new BLOCKER/CRITICAL findings.",
+  "warnings_strict_justification": "SonarCloud quality gate fails the build on new BLOCKER/CRITICAL findings; `go vet` failures are CI-fatal.",
 
   "know_secure_design_status": "Met",
-  "know_secure_design_justification": "Maintainer follows OWASP Top-10 guidance; the v0.3 spec set explicitly documented threat-model decisions for auth (V27 argon2id), session token storage, and the reverse-proxy origin check.",
+  "know_secure_design_justification": "Maintainer follows OWASP Top-10 guidance. Threat-model decisions are documented in SECURITY.md; the v0.3 release explicitly removed all networked surface (HTTP daemon, auth, webhook delivery) so the remaining attack surface is the local CLI plus its on-disk state under `~/.config/ctm/` and `~/.codex/sessions/`.",
 
   "know_common_errors_status": "Met",
   "know_common_errors_justification": "Maintainer is familiar with OWASP Top-10 and CWE/SANS Top-25 patterns and applies them at PR review.",
 
-  "crypto_published_status": "Met",
-  "crypto_published_justification": "Auth uses argon2id (RFC 9106) and standard library crypto/rand — both published and widely reviewed.",
+  "crypto_published_status": "N/A",
+  "crypto_published_justification": "ctm performs no cryptographic operations beyond UUID generation since the v0.3 removal of the auth daemon.",
 
-  "crypto_call_status": "Met",
-  "crypto_call_justification": "Password hashing routes through Go's golang.org/x/crypto/argon2 package; no hand-rolled crypto.",
+  "crypto_call_status": "N/A",
+  "crypto_call_justification": "No cryptographic primitive calls remain after the auth/session-token subsystem was removed in v0.3.",
 
   "crypto_floss_status": "Met",
-  "crypto_floss_justification": "All crypto routines are from Go's stdlib or x/crypto — both FLOSS.",
+  "crypto_floss_justification": "The only crypto call left in the codebase is `crypto/rand` (Go stdlib, FLOSS) for UUID generation in internal/session.",
 
-  "crypto_keylength_status": "Met",
-  "crypto_keylength_justification": "Argon2id parameters meet OWASP recommendations (memory >= 19 MiB, iterations >= 2, parallelism = 1). Session tokens are 256-bit random.",
+  "crypto_keylength_status": "N/A",
+  "crypto_keylength_justification": "No keyed cryptographic operations remain.",
 
   "crypto_working_status": "Met",
-  "crypto_working_justification": "No known-broken algorithms (no MD5/SHA1 for integrity, no DES, no RC4).",
+  "crypto_working_justification": "No known-broken algorithms anywhere in the codebase (no MD5/SHA1 for integrity, no DES, no RC4).",
 
   "crypto_weaknesses_status": "Met",
   "crypto_weaknesses_justification": "No use of MD5, SHA1 (for integrity), DES, RC4, or ECB mode anywhere in the codebase.",
 
   "crypto_pfs_status": "N/A",
-  "crypto_pfs_justification": "ctm binds 127.0.0.1 only; TLS termination is the operator's reverse-proxy responsibility.",
+  "crypto_pfs_justification": "ctm has no network listener since v0.3; TLS / PFS are not relevant.",
 
-  "crypto_password_storage_status": "Met",
-  "crypto_password_storage_justification": "Passwords stored as argon2id hashes (V27 single-user auth); never logged or persisted in plaintext.",
+  "crypto_password_storage_status": "N/A",
+  "crypto_password_storage_justification": "ctm stores no user passwords since the V27 single-user auth daemon was removed in v0.3.",
 
   "crypto_random_status": "Met",
-  "crypto_random_justification": "All session tokens generated via crypto/rand.",
+  "crypto_random_justification": "Session UUIDs (the only random IDs ctm generates) come from `crypto/rand` via internal/session/uuid.go.",
 
   "delivery_mitm_status": "Met",
   "delivery_mitm_justification": "Releases delivered via HTTPS (GitHub Releases) with TLS-protected git fetch.",
@@ -209,10 +208,10 @@
   "no_leaked_credentials_justification": "SonarCloud's secret-detection rules + GitHub's secret scanning run on every push; no credentials in commit history.",
 
   "static_analysis_status": "Met",
-  "static_analysis_justification": "SonarCloud (Go + TypeScript) and CodeQL (security) run on every push and PR.",
+  "static_analysis_justification": "SonarCloud (Go) runs on every push and PR via .github/workflows/sonar.yml; `go vet` runs in CI; `govulncheck` runs as part of `make regression`.",
 
   "static_analysis_common_vulnerabilities_status": "Met",
-  "static_analysis_common_vulnerabilities_justification": "CodeQL covers OWASP Top-10 vulnerability families; SonarCloud's security profile covers CWE Top-25.",
+  "static_analysis_common_vulnerabilities_justification": "SonarCloud's security profile covers CWE Top-25; `govulncheck` reports any reachable CVE in the Go module graph.",
 
   "static_analysis_fixed_status": "Met",
   "static_analysis_fixed_justification": "Findings are either fixed in code or explicitly Accepted with a documented justification.",
@@ -221,7 +220,7 @@
   "static_analysis_often_justification": "Static analysis runs on every push and PR — well exceeding the 'before each release' bar.",
 
   "dynamic_analysis_status": "Met",
-  "dynamic_analysis_justification": "`go test -race ./...` runs Go's runtime data-race detector on every PR and on every release. The race detector instruments memory accesses across goroutines and panics on a detected race; for a goroutine-heavy HTTP+tmux daemon this is the realistic dynamic-analysis tool.",
+  "dynamic_analysis_justification": "`go test -race ./...` runs Go's runtime data-race detector on every PR and release. The race detector instruments memory accesses across goroutines and panics on a detected race; ctm uses goroutines for the post-spawn agent-session-id discovery path, so the race detector remains the realistic dynamic-analysis tool even after the daemon was removed.",
 
   "dynamic_analysis_unsafe_status": "N/A",
   "dynamic_analysis_unsafe_justification": "Go is memory-safe (no manual memory management; bounds-checked slices; nil-checked pointer dereferences). Race-detector coverage above provides the meaningful dynamic-safety check.",

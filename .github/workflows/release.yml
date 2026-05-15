@@ -40,39 +40,10 @@ jobs:
           # and the release build succeed against the source tree.
           go-version-file: go.mod
 
-      - name: Set up pnpm
-        # Pinned to commit SHA per supply-chain hygiene — third-party
-        # actions can be rewritten under a moving tag. Bump by re-running
-        # `gh api repos/pnpm/action-setup/git/refs/tags/v4`.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          # Pinned to ui/package.json packageManager so a bumped lockfile
-          # doesn't desync from the toolchain CI runs the build with.
-          version: 10.33.0
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: ui/pnpm-lock.yaml
-
-      - name: Build UI bundle
-        # Populates internal/serve/dist/ from ui/dist/ via rsync so the
-        # `//go:embed all:dist` directive in internal/serve/assets.go has
-        # a non-empty match. Without this, both `go test ./...` and the
-        # cross-compiled binary builds below fail at compile time. The
-        # populated dist is naturally bundled into the air-gapped source
-        # tarball later (the tar excludes top-level ./dist staging only,
-        # not internal/serve/dist).
-        run: make ui
-
       - name: Run tests
         # sqlite_fts5: mattn/go-sqlite3 only compiles FTS5 in when this
-        # tag is set. internal/serve/store's schema uses
-        # `CREATE VIRTUAL TABLE … USING fts5(…)` — without the tag,
-        # OpenCostStore() fails at runtime with "no such module: fts5"
-        # and ~25 store/serve tests blow up.
+        # tag is set. Stores using `CREATE VIRTUAL TABLE … USING fts5(…)`
+        # fail at runtime with "no such module: fts5" without it.
         # -race: Go's data-race detector. Gates the release on a clean
         # dynamic-analysis pass per OpenSSF Best Practices
         # `dynamic_analysis` / `dynamic_analysis_enable_assertions`.

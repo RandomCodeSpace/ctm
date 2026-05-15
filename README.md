@@ -1,6 +1,6 @@
 <h1 align="center">ctm</h1>
 
-<p align="center"><i>Claude Tmux Manager — survive SSH drops, reattach from your phone.</i></p>
+<p align="center"><i>Codex Tmux Manager — survive SSH drops, reattach from your phone.</i></p>
 
 <p align="center">
   <a href="https://github.com/RandomCodeSpace/ctm/releases"><img src="https://img.shields.io/github/v/release/RandomCodeSpace/ctm?color=blue&include_prereleases&sort=semver" alt="Latest release"></a>
@@ -15,8 +15,7 @@
   <a href="#quickstart">Quickstart</a> ·
   <a href="#commands">Commands</a> ·
   <a href="#mobile-scroll">Mobile</a> ·
-  <a href="#configuration">Config</a> ·
-  <a href="#statusline">Statusline</a>
+  <a href="#configuration">Config</a>
 </p>
 
 ## Quickstart
@@ -28,7 +27,7 @@ Download the prebuilt binary for your platform (no Go toolchain needed):
 curl -LO https://github.com/RandomCodeSpace/ctm/releases/latest/download/ctm-$(curl -s https://api.github.com/repos/RandomCodeSpace/ctm/releases/latest | jq -r .tag_name)-linux-amd64.tar.gz
 tar xzf ctm-*-linux-amd64.tar.gz && sudo mv ctm-*/ctm /usr/local/bin/
 
-ctm                    # launches tmux + claude; drop SSH, reattach anytime
+ctm                    # launches tmux + codex; drop SSH, reattach anytime
 ctm last               # one-word reconnect from your phone
 ```
 
@@ -42,26 +41,22 @@ Either way, `ctm` bootstraps `~/.config/ctm/` on first run and injects shell ali
 
 ## Why ctm?
 
-Claude Code on a remote dev box is great until your train enters a tunnel. Plain SSH + a direct `claude` invocation dies with the connection; reconnecting starts from scratch. **ctm wraps claude in tmux with mobile-first defaults** — Alt-based keybindings, OSC52 clipboard, one-keystroke session pickers, stale-session markers — so the conversation keeps running while you're underground, and reattaches from your phone with a single word.
+Codex on a remote dev box is great until your train enters a tunnel. Plain SSH + a direct `codex` invocation dies with the connection; reconnecting starts from scratch. **ctm wraps codex in tmux with mobile-first defaults** — Alt-based keybindings, OSC52 clipboard, one-keystroke session pickers, stale-session markers — so the conversation keeps running while you're underground, and reattaches from your phone with a single word.
 
 ```
-Opus 4.7 (1M)  ~/projects/ctm
-c 49% (486.8k)  w 34%  h 25%
-↑ 118.6k  ↓ 434.8k  xhigh
+codex 0.130.0  ~/projects/ctm  ●
 ```
 
-(Above: the 3-line statusline ctm ships. Context fill + rate limits + cumulative tokens + current `/effort`, all from one hook.)
+(Above: ctm's tmux statusline — agent + cwd + activity dot. Codex doesn't expose context/rate-limit telemetry, so the line stays minimal.)
 
 ## Features
 
 - **Mobile-first workflow.** `ctm last`, `ctm pick <filter>`, `Alt-a` second prefix, OSC52 clipboard sync, stale-session markers — the entire UX assumes you're on a phone with flaky Wi-Fi and a fat thumb.
-- **Persistent sessions.** tmux-backed. Claude keeps running when SSH drops; reattach from any device.
-- **Resume with fallback.** `claude --resume UUID || claude --session-id UUID` — recovers cleanly when session history is missing.
-- **Tool-use logging.** Built-in PostToolUse hook writes one JSONL line per tool call; `ctm logs --since 7d --tool Bash --grep pattern` queries transparently across rotated history.
-- **Claude overlay.** `claude-overlay.json` applies ctm-only settings (statusline, theme, hooks) without touching your global `~/.claude/settings.json`.
-- **YOLO mode.** Auto-commits a git checkpoint before bypassing permissions, so you can always roll back.
-- **Preflight health checks.** Env vars, PATH, workdir, tmux session, claude process — cached for 60 s to keep mobile reconnects snappy.
-- **Tight lifecycle coupling.** When claude exits, the tmux session dies. No stuck bash shells, no zombie tabs.
+- **Persistent sessions.** tmux-backed. Codex keeps running when SSH drops; reattach from any device.
+- **Resume with fallback.** `codex resume <id> || codex` — recovers cleanly when the prior session can't be re-opened. Use `codex resume --last` for the most recent.
+- **YOLO mode.** Auto-commits a git checkpoint before launching with `codex --sandbox danger-full-access`, so you can always roll back.
+- **Preflight health checks.** Env vars, PATH, workdir, tmux session, codex process — cached for 60 s to keep mobile reconnects snappy.
+- **Tight lifecycle coupling.** When codex exits, the tmux session dies. No stuck bash shells, no zombie tabs.
 - **Crash-safe state.** Atomic writes, flock-based locking, strict JSON decode with self-healing strip-to-.bak, `schema_version` + startup migrations on `sessions.json` / `config.json`.
 - **Zero non-tmux runtime deps.** Pure Go throughout. No `jq`, `pgrep`, `grep`, or `uuidgen` required.
 
@@ -96,7 +91,7 @@ go install github.com/RandomCodeSpace/ctm@latest
 
 ### Post-install
 
-No extra setup step is required — the first time you run any claude-launching command (`ctm`, `ctm <name>`, `ctm new`, `ctm yolo`), ctm bootstraps `~/.config/ctm/` with sensible defaults, regenerates `tmux.conf` on every launch, and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
+No extra setup step is required — the first time you run any codex-launching command (`ctm`, `ctm <name>`, `ctm new`, `ctm yolo`), ctm bootstraps `~/.config/ctm/` with sensible defaults, regenerates `tmux.conf` on every launch, and injects shell aliases into `~/.bashrc` / `~/.zshrc` if they exist.
 
 If you prefer an explicit setup step (or want the cc-session migration to run), `ctm install` still does the same work upfront.
 
@@ -165,7 +160,7 @@ Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `c
 ## Requirements
 
 - tmux 3.0+
-- [Claude Code CLI](https://claude.com/claude-code) on `$PATH`
+- [Codex CLI](https://github.com/openai/codex) on `$PATH` (install via `npm i -g @openai/codex` or your package manager of choice)
 - A terminal that speaks xterm + OSC52 (Termius, WebSSH, iTerm2, Kitty, wezterm, Windows Terminal)
 - Go 1.25+ — **only** if you build from source (`go install`); prebuilt binaries have no Go dependency
 - Linux or macOS — Windows is not supported natively; use WSL
@@ -176,7 +171,7 @@ Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `c
 
 | Command | Description |
 |---|---|
-| `ctm` | Attach to the default session (`claude`). Creates it if missing. |
+| `ctm` | Attach to the default session (`codex`). Creates it if missing. |
 | `ctm <name>` | Attach to a named session, or create it. |
 | `ctm cc` | Shorthand for attaching to `cc`. |
 | `ctm new <name>` | Create a new session in a specific workdir. |
@@ -196,7 +191,7 @@ Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `c
 | Command | Description |
 |---|---|
 | `ctm detach` | Detach the current tmux client. Same as `Alt-d` inside a session. |
-| `ctm kill <name>` | Kill a tmux session and its claude process. |
+| `ctm kill <name>` | Kill a tmux session and its codex process. |
 | `ctm forget <name>` | Remove a session from the store without killing tmux. |
 | `ctm rename <old> <new>` | Rename a session across ctm state and tmux. |
 
@@ -209,67 +204,6 @@ Completion is aware of subcommands, flags, and (for `ctm attach`, `ctm kill`, `c
 | `ctm --verbose <cmd>` | Emit debug output for any command (alias for `--log-level=debug`). |
 | `ctm --log-level <lvl>` | Structured diagnostic log level on stderr: `debug`\|`info`\|`warn`\|`error`. Default: `info`. Set `CTM_LOG_FORMAT=json` for NDJSON output. |
 | `ctm version` | Print version. |
-
-### Claude overlay
-
-| Command | Description |
-|---|---|
-| `ctm overlay` | Show overlay status (active / missing) with paths to sidecar files. |
-| `ctm overlay init` | Create a sample `~/.config/ctm/claude-overlay.json` + `statusline.sh` + `env.sh` + hooks wiring. |
-| `ctm overlay edit` | Open the overlay in `$EDITOR` (creates sidecars if missing). |
-| `ctm overlay path` | Print the overlay file path. |
-
-When the overlay file exists, ctm-spawned claude invocations get `--settings <path>` automatically, and `env.sh` is sourced by the shell before claude starts. Direct `claude` invocations outside ctm are untouched.
-
-#### Statusline
-
-ctm ships a 3-line statusLine renderer (`ctm statusline`) that the overlay wires into Claude Code as `statusLine.command`. Layout:
-
-```
-Opus 4.7 (1M)  ~/projects/ctm
-c 49% (486.8k)  w 34%  h 25%
-↑ 118.6k  ↓ 434.8k  xhigh
-```
-
-- **Line 1** — model name (redundant `Claude` / `claude-` prefix stripped) and project dir (OSC 8 hyperlinked to the `origin` remote when a `.git/config` is found).
-- **Line 2** — `c` context used + tokens currently consumed (input-only sum per Claude Code's formula), `w` weekly rate-limit usage, `h` 5-hour rate-limit usage. Percentages taken verbatim from the payload; parenthesised token count formatted with SI suffix (`k` / `M` / `B`).
-- **Line 3** — `↑` cumulative session input tokens, `↓` cumulative session output tokens (SI-formatted). Current `/effort` level is appended dim-gray (`min`/`low`/`medium`/`high`/`xhigh`/`max`), sourced from `~/.claude/settings.json` since Claude Code's statusLine payload does not expose it.
-
-Sections with missing payload fields are silently skipped, and at the default `INFO` log level nothing is written to stderr. To wire it into Claude Code outside a ctm-spawned session too, set `statusLine` in `~/.claude/settings.json`:
-
-```json
-{
-  "statusLine": { "type": "command", "command": "ctm statusline" }
-}
-```
-
-### Logs
-
-| Command | Description |
-|---|---|
-| `ctm logs` | List sessions with tool-use logs, sorted by most recent. |
-| `ctm logs <session-id>` | Dump a session's formatted tool-use log. |
-| `ctm logs <session-id> -f` | Tail the log in real time. Handles rotation and truncation. |
-| `ctm logs <session-id> --raw` | Print raw JSONL lines (pipe to `jq` for scripting). |
-| `ctm logs <session-id> --since 7d` | Only show entries newer than this duration (`Nd` shorthand for days). |
-| `ctm logs <session-id> --tool Bash` | Only show entries whose `tool_name` matches (case-insensitive). |
-| `ctm logs <session-id> --grep '\bpassword\b'` | Only show entries whose raw JSON matches this regex. |
-
-Filters AND together and apply across both the active log and rotated `.gz` siblings.
-
-Logs are populated by a PostToolUse hook registered in the overlay. Each entry contains the full Claude Code hook payload plus a UTC timestamp. File perms 0600, session-id sanitized to prevent path traversal, concurrent writes coordinated via advisory flock.
-
-**Rotation & retention.** When a session's active log crosses the size cap (default 50 MiB), it is renamed to `<session>.jsonl.<unix-nano>`, gzipped in place to `<session>.jsonl.<unix-nano>.gz`, and a fresh empty active log replaces it. Rotated siblings are pruned beyond the age cap (default 30 days) or count cap (default 10 files). `ctm logs <session>` and `ctm logs <session> -f` read the active log **and** every rotated `.gz` sibling transparently, so history spanning rotations is a single chronological stream. Override the defaults in `config.json`:
-
-```json
-{
-  "log_max_size_mb": 100,
-  "log_max_age_days": 14,
-  "log_max_files": 5
-}
-```
-
-A zero value means "use the built-in default" — to effectively disable a cap, set it to a very large number.
 
 ## Keybindings
 
@@ -285,7 +219,7 @@ Inside any ctm tmux session:
 
 ## Mobile scroll
 
-> **The mobile scrollback trick.** Claude Code's TUI uses alt-screen and has no built-in scroll history. To scroll back on a phone:
+> **The mobile scrollback trick.** Codex's TUI uses alt-screen and has no built-in scroll history. To scroll back on a phone:
 >
 > 1. Press **`Alt-[`** (or `Ctrl-b [`) — enters tmux copy mode.
 > 2. Swipe / arrow keys to scroll.
@@ -304,9 +238,6 @@ Inside any ctm tmux session:
 - `~/.config/ctm/config.json` — main config (scrollback lines, required env vars, default mode, health check timeout, yolo checkpoint toggle)
 - `~/.config/ctm/sessions.json` — session state (atomically written, flock-locked)
 - `~/.config/ctm/tmux.conf` — generated tmux config (mobile-optimized, don't edit)
-- `~/.config/ctm/claude-overlay.json` — optional claude settings overlay (statusline, theme, hooks) — created on first launch
-- `~/.config/ctm/env.sh` — shell env sourced before claude spawns (for early-binding env vars like `CLAUDE_CODE_NO_FLICKER`)
-- `~/.config/ctm/logs/<session-id>.jsonl` — per-session tool-use logs (0600)
 
 ### State file versioning
 

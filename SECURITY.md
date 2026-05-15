@@ -35,12 +35,11 @@ The faster the maintainer can reproduce the issue, the faster a fix
 ships. Please include:
 
 - **Affected versions** (output of `ctm version`).
-- **Environment**: OS, tmux version, shell, whether ctm is reachable
-  from outside `127.0.0.1` (e.g. via reverse proxy).
+- **Environment**: OS, tmux version, shell, codex CLI version.
 - **Impact**: what an attacker can do — RCE, info disclosure,
   privilege escalation, DoS, etc.
-- **Reproducer**: smallest sequence of commands or HTTP requests
-  that triggers the issue.
+- **Reproducer**: smallest sequence of commands that triggers the
+  issue.
 - **Suggested fix** if you have one — appreciated but not required.
 - **Whether you intend to seek a CVE** — the maintainer can help
   reserve one through GitHub's advisory flow.
@@ -62,37 +61,40 @@ ping the same channel — mail can get lost.
 
 In scope:
 
-- The `ctm` CLI and all subcommands (`yolo`, `safe`, `attach`,
-  `serve`, `kill`, etc.).
-- The `ctm serve` HTTP daemon and its API + UI surface.
-- Any session-state, log, or auth file ctm writes under
-  `~/.config/ctm/` or `~/.claude/`.
+- The `ctm` CLI and all subcommands (`yolo`, `safe`, attach,
+  `kill`, `last`, `pick`, etc.).
+- Any session-state file ctm writes under `~/.config/ctm/`, and the
+  generated `tmux.conf`.
+- Lifecycle hook execution (`on_attach` / `on_new` / `on_yolo` /
+  `on_safe` / `on_kill`) — env-var handling and shell quoting.
 - Build-time supply-chain integrity (vendored deps, release
   artifacts).
 
 Out of scope:
 
-- Bugs in tmux, claude, git, or any other binary ctm shells out to.
-- Configuration mistakes by the operator (e.g. binding `ctm serve`
-  to `0.0.0.0` without an authenticating reverse proxy).
+- Bugs in tmux, codex, git, or any other binary ctm shells out to.
 - Findings that require a pre-compromised local user account on the
   same machine where ctm runs (ctm trusts the user it runs as).
+- YOLO mode's documented `codex --sandbox danger-full-access`
+  behaviour. The git checkpoint is the safety net; bypassing the
+  sandbox is the explicit point of the mode.
 
 ## Security architecture quick reference
 
 For background while reviewing a report:
 
-- ctm binds **`127.0.0.1` only** by default. External exposure is
-  the operator's reverse-proxy responsibility.
-- Single-user authentication uses **argon2id** (RFC 9106) with
-  parameters meeting OWASP recommendations. See V27 spec.
-- Session tokens are **256-bit** values from `crypto/rand`, stored
-  hashed.
-- Mutation endpoints require both a bearer token **and** an Origin
-  header allow-list (see `internal/serve/api/`).
-- All git, tmux, and claude invocations resolve binaries through
+- ctm has **no network listener**. It is a CLI that shells out to
+  tmux, git, and codex; there is no daemon, no HTTP surface, no
+  open port.
+- All git, tmux, and codex invocations resolve binaries through
   `$PATH` — see `sonar-project.properties` for the documented
   threat model behind that.
+- State files under `~/.config/ctm/` are written atomically with
+  `flock`-based locking and `0600` permissions where they hold
+  anything sensitive.
+- YOLO mode auto-commits a git checkpoint before launching codex
+  with `--sandbox danger-full-access`, so destructive output can be
+  rolled back with `git reset`.
 
 ## Public disclosures to date
 

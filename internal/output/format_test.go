@@ -22,12 +22,12 @@ func TestSuccess(t *testing.T) {
 func TestError(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewPrinter(&buf)
-	p.Error("cannot attach", "claude process is dead", "run 'ctm forget myproject'")
+	p.Error("cannot attach", "codex process is dead", "run 'ctm forget myproject'")
 	got := buf.String()
 	if !containsText(got, "cannot attach") {
 		t.Errorf("expected 'cannot attach' in output, got: %q", got)
 	}
-	if !containsText(got, "claude process is dead") {
+	if !containsText(got, "codex process is dead") {
 		t.Errorf("expected reason in output, got: %q", got)
 	}
 	if !containsText(got, "ctm forget myproject") {
@@ -48,9 +48,9 @@ func TestWarn(t *testing.T) {
 func TestInfo(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewPrinter(&buf)
-	p.Info("Attaching to: %s", "claude")
+	p.Info("Attaching to: %s", "codex")
 	got := buf.String()
-	if !containsText(got, "Attaching to: claude") {
+	if !containsText(got, "Attaching to: codex") {
 		t.Errorf("expected info text, got: %q", got)
 	}
 }

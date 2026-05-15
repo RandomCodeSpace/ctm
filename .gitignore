@@ -15,18 +15,17 @@ coverage.*
 .DS_Store
 .superpowers/
 
-# UI build output (rsync'd from ui/dist for go:embed; regenerated on build)
-internal/serve/dist/
-
 # Planning / spec docs — kept locally, not shared in repo history
 docs/
 
 # Subagent worktree scratch paths (managed by the harness, not source)
 .claude/worktrees/
 
+# Local agent loop state (ralph-loop iteration snapshots, etc.) — runtime, not source
+.claude/*.local.md
+
 # Local code-intelligence cache (codeiq) — runtime DB + neo4j store, not source
 .codeiq/
 
-# Coverage reports (Go + vitest) — regenerated per-test, never committed
+# Coverage reports — regenerated per-test, never committed
 coverage.out
-ui/coverage/
