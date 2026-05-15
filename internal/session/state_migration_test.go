@@ -10,10 +10,10 @@ import (
 	"github.com/RandomCodeSpace/ctm/internal/session"
 )
 
-// TestMigration_V1ToV2_BackfillsAgentClaude verifies that the v1→v2
-// migration step stamps agent="claude" on any session row missing the
-// field, and leaves rows that already have an agent untouched.
-func TestMigration_V1ToV2_BackfillsAgentClaude(t *testing.T) {
+// TestMigration_V1ToV3_RewritesAllToCodex verifies the full v1 → v3
+// migration path: legacy rows missing `agent` get stamped (v1→v2) and
+// every row ends at "codex" (v2→v3 rewrite of legacy "claude" values).
+func TestMigration_V1ToV3_RewritesAllToCodex(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sessions.json")
 	v1 := `{
@@ -36,17 +36,53 @@ func TestMigration_V1ToV2_BackfillsAgentClaude(t *testing.T) {
 	}
 	var sv int
 	_ = json.Unmarshal(got["schema_version"], &sv)
-	if sv != 2 {
-		t.Fatalf("schema_version = %d, want 2", sv)
+	if sv != 3 {
+		t.Fatalf("schema_version = %d, want 3", sv)
 	}
 	var sessions map[string]map[string]any
 	if err := json.Unmarshal(got["sessions"], &sessions); err != nil {
 		t.Fatalf("sessions unmarshal: %v", err)
 	}
 	for name, row := range sessions {
-		if row["agent"] != "claude" {
-			t.Fatalf("session[%s].agent = %v, want \"claude\"", name, row["agent"])
+		if row["agent"] != "codex" {
+			t.Fatalf("session[%s].agent = %v, want \"codex\"", name, row["agent"])
 		}
+	}
+}
+
+// TestMigration_V2ToV3_RewritesClaudeRowsOnly verifies isolated v2→v3
+// behavior: only agent="claude" rows are rewritten; non-claude agents
+// (e.g. a future "opencode") are left alone.
+func TestMigration_V2ToV3_RewritesClaudeRowsOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sessions.json")
+	v2 := `{
+  "schema_version": 2,
+  "sessions": {
+    "legacy":  {"name":"legacy","uuid":"u-1","mode":"yolo","workdir":"/tmp","agent":"claude"},
+    "other":   {"name":"other","uuid":"u-2","mode":"safe","workdir":"/tmp","agent":"opencode"}
+  }
+}`
+	if err := os.WriteFile(path, []byte(v2), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrate.Run(path, session.MigrationPlan()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	var sessions map[string]map[string]any
+	if err := json.Unmarshal(got["sessions"], &sessions); err != nil {
+		t.Fatalf("sessions unmarshal: %v", err)
+	}
+	if sessions["legacy"]["agent"] != "codex" {
+		t.Fatalf("legacy.agent = %v, want \"codex\"", sessions["legacy"]["agent"])
+	}
+	if sessions["other"]["agent"] != "opencode" {
+		t.Fatalf("other.agent = %v, want \"opencode\" (untouched)", sessions["other"]["agent"])
 	}
 }
 
@@ -80,7 +116,9 @@ func TestMigration_V1ToV2_Idempotent(t *testing.T) {
 }
 
 // TestSession_AgentFieldRoundTrip verifies that the Agent and
-// AgentSessionID fields survive Save / Get cycle.
+// AgentSessionID fields survive a Save / Get cycle for non-default
+// agents. (The default agent path is covered by
+// TestSession_EmptyAgentDefaultsCodexOnSave.)
 func TestSession_AgentFieldRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	store := session.NewStore(filepath.Join(dir, "sessions.json"))
@@ -89,8 +127,8 @@ func TestSession_AgentFieldRoundTrip(t *testing.T) {
 		UUID:           "u-foo",
 		Mode:           "yolo",
 		Workdir:        "/tmp",
-		Agent:          "claude",
-		AgentSessionID: "u-foo",
+		Agent:          "codex",
+		AgentSessionID: "thread-foo",
 	}
 	if err := store.Save(in); err != nil {
 		t.Fatalf("save: %v", err)
@@ -99,18 +137,17 @@ func TestSession_AgentFieldRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if out.Agent != "claude" {
-		t.Fatalf("Agent = %q, want claude", out.Agent)
+	if out.Agent != "codex" {
+		t.Fatalf("Agent = %q, want codex", out.Agent)
 	}
-	if out.AgentSessionID != "u-foo" {
-		t.Fatalf("AgentSessionID = %q, want u-foo", out.AgentSessionID)
+	if out.AgentSessionID != "thread-foo" {
+		t.Fatalf("AgentSessionID = %q, want thread-foo", out.AgentSessionID)
 	}
 }
 
-// TestSession_EmptyAgentDefaultsClaudeOnSave verifies the Task 03
-// normalization step: Save sets s.Agent = "claude" when empty.
-// Strict registry validation is deferred to Task 06.
-func TestSession_EmptyAgentDefaultsClaudeOnSave(t *testing.T) {
+// TestSession_EmptyAgentDefaultsCodexOnSave verifies the read-side
+// guard: Save sets s.Agent = "codex" when empty.
+func TestSession_EmptyAgentDefaultsCodexOnSave(t *testing.T) {
 	dir := t.TempDir()
 	store := session.NewStore(filepath.Join(dir, "sessions.json"))
 	in := &session.Session{
@@ -124,7 +161,29 @@ func TestSession_EmptyAgentDefaultsClaudeOnSave(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 	out, _ := store.Get("bar")
-	if out.Agent != "claude" {
-		t.Fatalf("empty Agent should default to \"claude\" on Save, got %q", out.Agent)
+	if out.Agent != "codex" {
+		t.Fatalf("empty Agent should default to \"codex\" on Save, got %q", out.Agent)
+	}
+}
+
+// TestSession_LegacyClaudeRewrittenOnSave verifies that an in-memory
+// Session with Agent="claude" (e.g. read from a v2 file by code that
+// skipped the migration runner) is rewritten to "codex" by Save.
+func TestSession_LegacyClaudeRewrittenOnSave(t *testing.T) {
+	dir := t.TempDir()
+	store := session.NewStore(filepath.Join(dir, "sessions.json"))
+	in := &session.Session{
+		Name:    "legacy",
+		UUID:    "u-legacy",
+		Mode:    "safe",
+		Workdir: "/tmp",
+		Agent:   "claude",
+	}
+	if err := store.Save(in); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	out, _ := store.Get("legacy")
+	if out.Agent != "codex" {
+		t.Fatalf("legacy claude row should be rewritten to codex on Save, got %q", out.Agent)
 	}
 }

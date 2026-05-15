@@ -19,11 +19,16 @@ import (
 // Bump this and append a Step to the Plan returned by MigrationPlan()
 // whenever the shape of diskData or Session changes in a non-additive way.
 //
-// v2: adds Session.Agent (set on creation, immutable; legacy rows are
-// backfilled to "claude") and Session.AgentSessionID (opaque per-agent
-// backend identifier — for claude == UUID, for codex the thread id
-// discovered post-spawn).
-const SchemaVersion = 2
+// v3: codex is the only supported agent. Any v2 rows with agent="claude"
+// are migrated to agent="codex" — the claude implementation has been
+// removed and continuing to reference it would fail at agent.For lookup.
+const SchemaVersion = 3
+
+// DefaultAgent is the registry key used when a session row has no agent
+// field set. Exposed as a constant so cmd/* code branching on the
+// default doesn't drift from the migration / Save / NormalizeAgent
+// codepaths.
+const DefaultAgent = "codex"
 
 // errFmtNotFound is the consistent shape returned by Get/Set/Delete/etc.
 // when a session name is unknown. Callers that distinguish "not found"
@@ -34,14 +39,18 @@ const errFmtNotFound = "session %q not found"
 // MigrationPlan returns the migrate.Plan for sessions.json.
 //
 //   - v0 → v1: stamp only (initial schema_version introduction).
-//   - v1 → v2: backfill agent="claude" on rows missing the field.
+//   - v1 → v2: backfill agent="claude" on rows missing the field
+//     (historical — claude was the only agent at the time).
+//   - v2 → v3: rewrite any agent="claude" rows to agent="codex" after
+//     claude support was removed.
 func MigrationPlan() migrate.Plan {
 	return migrate.Plan{
 		Name:           "sessions.json",
 		CurrentVersion: SchemaVersion,
 		Steps: []migrate.Step{
-			nil,              // v0 → v1: stamp only
-			stampAgentClaude, // v1 → v2: backfill agent
+			nil,                 // v0 → v1: stamp only
+			stampAgentClaude,    // v1 → v2: backfill agent
+			rewriteClaudeToCodex, // v2 → v3: claude → codex
 		},
 	}
 }
@@ -53,6 +62,10 @@ func MigrationPlan() migrate.Plan {
 // obj["sessions"] is the JSON map keyed by session name, so the
 // values are themselves objects. The step decodes lazily to keep
 // per-row diffs minimal.
+//
+// Historical: at v2 claude was the only supported agent. The follow-on
+// v2→v3 step (rewriteClaudeToCodex) rewrites the value once claude
+// was removed.
 func stampAgentClaude(obj map[string]json.RawMessage) error {
 	raw, ok := obj["sessions"]
 	if !ok || len(raw) == 0 {
@@ -70,6 +83,35 @@ func stampAgentClaude(obj map[string]json.RawMessage) error {
 	out, err := json.Marshal(byName)
 	if err != nil {
 		return fmt.Errorf("stampAgentClaude: marshal sessions: %w", err)
+	}
+	obj["sessions"] = out
+	return nil
+}
+
+// rewriteClaudeToCodex rewrites any agent="claude" row to agent="codex"
+// during the v2 → v3 migration. The claude Agent implementation was
+// removed; leaving the value as "claude" would surface as an
+// agent.For miss at session resume time.
+//
+// Idempotent — rows already at "codex" or any other (future) agent
+// pass through unchanged.
+func rewriteClaudeToCodex(obj map[string]json.RawMessage) error {
+	raw, ok := obj["sessions"]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	var byName map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &byName); err != nil {
+		return fmt.Errorf("rewriteClaudeToCodex: parse sessions: %w", err)
+	}
+	for _, row := range byName {
+		if a, present := row["agent"]; present && string(a) == `"claude"` {
+			row["agent"] = json.RawMessage(`"codex"`)
+		}
+	}
+	out, err := json.Marshal(byName)
+	if err != nil {
+		return fmt.Errorf("rewriteClaudeToCodex: marshal sessions: %w", err)
 	}
 	obj["sessions"] = out
 	return nil
@@ -116,12 +158,16 @@ type Session struct {
 	AgentSessionID string `json:"agent_session_id,omitempty"`
 }
 
-// NormalizeAgent returns "claude" when s.Agent is empty, else s.Agent
-// verbatim. Cheap idempotent guard used by read paths that handle
-// pre-migration in-memory values without touching disk.
+// NormalizeAgent returns DefaultAgent ("codex") when s.Agent is empty,
+// else s.Agent verbatim. Cheap idempotent guard used by read paths
+// that handle pre-migration in-memory values without touching disk.
+//
+// Legacy "claude" values that escaped the v2→v3 migration are also
+// remapped to "codex" so a stale in-memory Session never surfaces as
+// an agent.For miss at the call site.
 func (s *Session) NormalizeAgent() string {
-	if s.Agent == "" {
-		return "claude"
+	if s.Agent == "" || s.Agent == "claude" {
+		return DefaultAgent
 	}
 	return s.Agent
 }
@@ -268,11 +314,12 @@ func (s *Store) backupLocked() (string, error) {
 }
 
 // Save adds or updates a session. Empty sess.Agent is normalized to
-// "claude" — registry-based unknown-agent rejection is added in
-// Task 06 once at least one Agent is registered at boot.
+// DefaultAgent ("codex"). Legacy "claude" values are also rewritten —
+// the claude implementation was removed and a stray "claude" row
+// would fail at spawn-time agent.For lookup.
 func (s *Store) Save(sess *Session) error {
-	if sess.Agent == "" {
-		sess.Agent = "claude"
+	if sess.Agent == "" || sess.Agent == "claude" {
+		sess.Agent = DefaultAgent
 	}
 
 	lf, err := s.lock()
@@ -430,6 +477,32 @@ func (s *Store) UpdateHealth(name, status string) error {
 	}
 	sess.LastHealthStatus = status
 	sess.LastHealthAt = time.Now().UTC()
+	return s.save(d)
+}
+
+// UpdateAgentSessionID stamps the agent-backend thread/session
+// identifier on the named session. Idempotent — supplying the same id
+// twice is a no-op on disk apart from the rewrite. Returns the
+// "not found" error if name has no store entry.
+func (s *Store) UpdateAgentSessionID(name, id string) error {
+	lf, err := s.lock()
+	if err != nil {
+		return err
+	}
+	defer s.unlock(lf)
+
+	d, err := s.load()
+	if err != nil {
+		return err
+	}
+	sess, ok := d.Sessions[name]
+	if !ok {
+		return fmt.Errorf(errFmtNotFound, name)
+	}
+	if sess.AgentSessionID == id {
+		return nil
+	}
+	sess.AgentSessionID = id
 	return s.save(d)
 }
 

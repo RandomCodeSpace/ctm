@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	_ "github.com/RandomCodeSpace/ctm/internal/agent/codex" // register codex via init
 	"github.com/RandomCodeSpace/ctm/internal/session"
 )
 

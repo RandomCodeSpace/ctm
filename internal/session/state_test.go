@@ -305,13 +305,19 @@ func TestMigrationPlan_MatchesSchemaVersion(t *testing.T) {
 	}
 }
 
-// TestNormalizeAgent_DefaultsClaude covers the read-side helper that
-// every cmd/* read path will call before dispatching to agent.For().
-// Empty value → "claude"; populated value → verbatim passthrough.
-func TestNormalizeAgent_DefaultsClaude(t *testing.T) {
+// TestNormalizeAgent_DefaultsCodex covers the read-side helper. Empty
+// values default to "codex" (the post-claude-removal default); legacy
+// "claude" values are also remapped to "codex" so a stale Session
+// never surfaces as an agent.For miss at the call site. Other agent
+// names pass through verbatim.
+func TestNormalizeAgent_DefaultsCodex(t *testing.T) {
 	s := &session.Session{}
-	if got := s.NormalizeAgent(); got != "claude" {
-		t.Fatalf("NormalizeAgent on zero-value = %q, want claude", got)
+	if got := s.NormalizeAgent(); got != "codex" {
+		t.Fatalf("NormalizeAgent on zero-value = %q, want codex", got)
+	}
+	s.Agent = "claude"
+	if got := s.NormalizeAgent(); got != "codex" {
+		t.Fatalf("NormalizeAgent(claude) = %q, want codex (legacy remap)", got)
 	}
 	s.Agent = "codex"
 	if got := s.NormalizeAgent(); got != "codex" {
