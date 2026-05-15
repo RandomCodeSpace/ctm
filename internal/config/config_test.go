@@ -333,6 +333,92 @@ func TestMigration_V1ToV2_Idempotent(t *testing.T) {
 	}
 }
 
+// TestHookTimeout_ZeroIsDefault and TestHookTimeout_ExplicitRespected
+// cover both branches of the HookTimeout duration resolver. Zero (and
+// negative) values fall back to the package default; positive seconds
+// are returned verbatim.
+func TestHookTimeout_ZeroIsDefault(t *testing.T) {
+	for _, n := range []int{0, -3} {
+		c := Config{HookTimeoutSec: n}
+		want := time.Duration(DefaultHookTimeoutSec) * time.Second
+		if got := c.HookTimeout(); got != want {
+			t.Errorf("HookTimeout(%d) = %v, want %v", n, got, want)
+		}
+	}
+}
+
+func TestHookTimeout_ExplicitRespected(t *testing.T) {
+	c := Config{HookTimeoutSec: 42}
+	if got := c.HookTimeout(); got != 42*time.Second {
+		t.Errorf("HookTimeout(42) = %v, want 42s", got)
+	}
+}
+
+// TestRewriteRequiredPathClaude_MissingKey covers the early-return
+// branch when obj has no required_in_path key at all (or an empty raw
+// value). A v0/v1 config that never customized the list looks exactly
+// like this.
+func TestRewriteRequiredPathClaude_MissingKey(t *testing.T) {
+	in := map[string]json.RawMessage{} // no required_in_path
+	if err := rewriteRequiredPathClaude(in); err != nil {
+		t.Fatalf("expected no-op nil, got %v", err)
+	}
+	if _, present := in["required_in_path"]; present {
+		t.Error("step should not invent the key")
+	}
+}
+
+// TestRewriteRequiredPathClaude_MalformedArray covers the
+// "json.Unmarshal into []json.RawMessage failed" branch: the malformed
+// value is left untouched (jsonstrict will surface the error on the
+// typed Load that follows). The step must not error.
+func TestRewriteRequiredPathClaude_MalformedArray(t *testing.T) {
+	in := map[string]json.RawMessage{
+		"required_in_path": json.RawMessage(`"not-an-array"`),
+	}
+	original := in["required_in_path"]
+	if err := rewriteRequiredPathClaude(in); err != nil {
+		t.Fatalf("expected no-op on malformed value, got %v", err)
+	}
+	if string(in["required_in_path"]) != string(original) {
+		t.Errorf("malformed value mutated: got %s", in["required_in_path"])
+	}
+}
+
+// TestRewriteRequiredPathClaude_NonStringEntries covers the inner-loop
+// branch where an individual entry is not a JSON string (defensive). It
+// is passed through verbatim.
+func TestRewriteRequiredPathClaude_NonStringEntries(t *testing.T) {
+	in := map[string]json.RawMessage{
+		"required_in_path": json.RawMessage(`["claude",123,{"x":1}]`),
+	}
+	if err := rewriteRequiredPathClaude(in); err != nil {
+		t.Fatalf("step error: %v", err)
+	}
+	var list []json.RawMessage
+	if err := json.Unmarshal(in["required_in_path"], &list); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if string(list[0]) != `"codex"` {
+		t.Errorf("first entry (claude) not rewritten: %s", list[0])
+	}
+	if string(list[1]) != `123` {
+		t.Errorf("non-string entry mutated: %s", list[1])
+	}
+}
+
+// TestRewriteRequiredPathClaude_EmptyRawValue covers the explicit
+// "raw exists but len==0" branch (defensive — Marshal would never
+// emit this, but a hand-edited config might).
+func TestRewriteRequiredPathClaude_EmptyRawValue(t *testing.T) {
+	in := map[string]json.RawMessage{
+		"required_in_path": json.RawMessage(``),
+	}
+	if err := rewriteRequiredPathClaude(in); err != nil {
+		t.Fatalf("expected no-op, got %v", err)
+	}
+}
+
 // TestMigration_V1ToV2_FullPlanRewritesLegacyConfig verifies end-to-
 // end behavior via the migrate runner: a v1 config.json with
 // `claude` in required_in_path lands at v2 with `codex`, no backup.

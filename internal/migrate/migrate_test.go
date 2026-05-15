@@ -280,3 +280,37 @@ func TestRun_StepCountMismatch_Errors(t *testing.T) {
 type migrationErr struct{ msg string }
 
 func (e *migrationErr) Error() string { return e.msg }
+
+// TestRun_NullJSON_TreatedAsEmpty covers the `obj == nil` re-init
+// branch: literal `null` parses cleanly into a nil map; the runner
+// must replace it with an empty map and proceed (stamping
+// schema_version like an unversioned file).
+func TestRun_NullJSON_TreatedAsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.json")
+	if err := os.WriteFile(path, []byte(`null`), 0600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	res, err := Run(path, newPlanV1())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Before != 0 || res.After != 1 {
+		t.Errorf("Result = %+v, want Before=0 After=1", res)
+	}
+}
+
+// TestRun_NonIntegerSchemaVersion_Errors covers the
+// "schema_version is not an integer" parse branch — a hand-edited
+// config that wrote `"schema_version":"1"` (string) must surface as
+// a clear error, not be silently re-stamped.
+func TestRun_NonIntegerSchemaVersion_Errors(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":"one"}`), 0600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if _, err := Run(path, newPlanV1()); err == nil {
+		t.Fatal("expected error on non-integer schema_version")
+	}
+}
