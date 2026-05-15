@@ -12,11 +12,29 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/RandomCodeSpace/ctm/internal/agent"
 	"github.com/RandomCodeSpace/ctm/internal/output"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
 )
+
+// resolveAgent validates the --agent flag value against the registry.
+// Returns ("", nil) when name is empty — caller falls back to
+// session.DefaultAgent via the empty-Agent handling in spawn.go.
+// Returns an error listing registered agents when name is non-empty
+// but unknown, so the user sees what choices they have.
+func resolveAgent(name string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	if _, ok := agent.For(name); ok {
+		return name, nil
+	}
+	return "", fmt.Errorf("unknown agent %q; available: %s",
+		name, strings.Join(agent.Registered(), ", "))
+}
 
 // shouldResumeExisting reports whether a stored session should be resumed via
 // preflight rather than torn down and recreated. A session is resumable iff

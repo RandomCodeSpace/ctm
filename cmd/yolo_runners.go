@@ -27,6 +27,9 @@ import (
 )
 
 func init() {
+	for _, c := range []*cobra.Command{yoloCmd, yoloBangCmd, safeCmd} {
+		c.Flags().String("agent", "", "Agent to spawn (codex, hermes). Empty uses the configured default.")
+	}
 	rootCmd.AddCommand(yoloCmd)
 	rootCmd.AddCommand(yoloBangCmd)
 	rootCmd.AddCommand(safeCmd)
@@ -106,6 +109,12 @@ func runYolo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	agentFlag, _ := cmd.Flags().GetString("agent")
+	agentName, err := resolveAgent(agentFlag)
+	if err != nil {
+		return err
+	}
+
 	if cfg.GitCheckpointBeforeYolo {
 		out.Debug(Verbose, "git checkpoint for %s", workdir)
 		gitCheckpoint(workdir, out)
@@ -130,7 +139,7 @@ func runYolo(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Debug(Verbose, "creating yolo session: %s", name)
-	return createAndAttach(name, workdir, "yolo", store, tc, out)
+	return createAndAttach(name, workdir, "yolo", agentName, store, tc, out)
 }
 
 func runYoloBang(cmd *cobra.Command, args []string) error {
@@ -149,6 +158,12 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	agentFlag, _ := cmd.Flags().GetString("agent")
+	agentName, err := resolveAgent(agentFlag)
+	if err != nil {
+		return err
+	}
+
 	if cfg.GitCheckpointBeforeYolo {
 		gitCheckpoint(workdir, out)
 	}
@@ -161,7 +176,7 @@ func runYoloBang(cmd *cobra.Command, args []string) error {
 	// a best-effort reset.
 	tearDownForRecreate(name, store, tc, out, false)
 
-	return createAndAttach(name, workdir, "yolo", store, tc, out)
+	return createAndAttach(name, workdir, "yolo", agentName, store, tc, out)
 }
 
 func runSafe(cmd *cobra.Command, args []string) error {
@@ -176,6 +191,12 @@ func runSafe(cmd *cobra.Command, args []string) error {
 	tc := tmux.NewClient(config.TmuxConfPath())
 
 	name, workdir, err := resolveModeTarget(args, store, tc)
+	if err != nil {
+		return err
+	}
+
+	agentFlag, _ := cmd.Flags().GetString("agent")
+	agentName, err := resolveAgent(agentFlag)
 	if err != nil {
 		return err
 	}
@@ -197,7 +218,7 @@ func runSafe(cmd *cobra.Command, args []string) error {
 		tearDownForRecreate(name, store, tc, out, false)
 	}
 
-	return createAndAttach(name, workdir, "safe", store, tc, out)
+	return createAndAttach(name, workdir, "safe", agentName, store, tc, out)
 }
 
 // gitCheckpoint creates a git checkpoint commit in workdir before yolo mode.

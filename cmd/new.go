@@ -15,6 +15,7 @@ import (
 )
 
 func init() {
+	newCmd.Flags().String("agent", "", "Agent to spawn (codex, hermes). Empty uses the configured default.")
 	rootCmd.AddCommand(newCmd)
 }
 
@@ -71,6 +72,12 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	agentFlag, _ := cmd.Flags().GetString("agent")
+	agentName, err := resolveAgent(agentFlag)
+	if err != nil {
+		return err
+	}
+
 	// Kill existing session with the same name if present
 	if _, err := store.Get(name); err == nil {
 		out.Warn("session %q already exists — replacing", name)
@@ -80,5 +87,5 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return createAndAttach(name, workdir, cfg.DefaultMode, store, tc, out)
+	return createAndAttach(name, workdir, cfg.DefaultMode, agentName, store, tc, out)
 }

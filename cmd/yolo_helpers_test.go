@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/RandomCodeSpace/ctm/internal/agent/codex"  // register codex for resolveAgent tests
+	_ "github.com/RandomCodeSpace/ctm/internal/agent/hermes" // register hermes for resolveAgent tests
 	"github.com/RandomCodeSpace/ctm/internal/output"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -331,6 +333,45 @@ func TestResolveModeTargetRejectsInvalidName(t *testing.T) {
 	_, _, err := resolveModeTarget([]string{"bad/name"}, store, tc)
 	if err == nil {
 		t.Fatal("expected validation error for 'bad/name', got nil")
+	}
+}
+
+// --- resolveAgent (--agent flag validation) ----------------------------------
+
+func TestResolveAgent_Empty(t *testing.T) {
+	got, err := resolveAgent("")
+	if err != nil {
+		t.Fatalf("resolveAgent(\"\") err = %v, want nil", err)
+	}
+	if got != "" {
+		t.Errorf("resolveAgent(\"\") = %q, want \"\" (caller falls back to DefaultAgent)", got)
+	}
+}
+
+func TestResolveAgent_Registered(t *testing.T) {
+	for _, name := range []string{"codex", "hermes"} {
+		got, err := resolveAgent(name)
+		if err != nil {
+			t.Errorf("resolveAgent(%q) err = %v, want nil", name, err)
+		}
+		if got != name {
+			t.Errorf("resolveAgent(%q) = %q, want %q", name, got, name)
+		}
+	}
+}
+
+func TestResolveAgent_Unregistered(t *testing.T) {
+	_, err := resolveAgent("totally-not-an-agent-xyz")
+	if err == nil {
+		t.Fatal("resolveAgent on unregistered name returned nil error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "unknown agent") {
+		t.Errorf("error %q should mention \"unknown agent\"", msg)
+	}
+	// Error must list available agents so the user can correct their flag.
+	if !strings.Contains(msg, "codex") || !strings.Contains(msg, "hermes") {
+		t.Errorf("error %q should list registered agents (codex, hermes)", msg)
 	}
 }
 
