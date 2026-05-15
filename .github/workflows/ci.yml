@@ -1,11 +1,10 @@
-# PR + non-main-push gate. Runs the same UI build + Go build + tests
-# the release pipeline depends on, so a broken main is caught before
-# merge instead of after.
+# PR + non-main-push gate. Runs the Go build + tests the release
+# pipeline depends on, so a broken main is caught before merge instead
+# of after.
 #
-# Scope intentionally narrower than `make regression`: e2e (Playwright
-# browser install + browser run), `pnpm audit`, and `govulncheck` are
-# heavier and currently run via `make regression` locally — adding them
-# here is a follow-up if/when they prove necessary as merge gates.
+# Scope intentionally narrower than `make regression`: `govulncheck` is
+# heavier and currently runs via `make regression` locally — adding it
+# here is a follow-up if/when it proves necessary as a merge gate.
 
 name: CI
 
@@ -36,27 +35,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Set up pnpm
-        # Pinned to commit SHA per supply-chain hygiene — third-party
-        # actions can be rewritten under a moving tag. Bump by re-running
-        # `gh api repos/pnpm/action-setup/git/refs/tags/v4`.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 10.33.0
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: ui/pnpm-lock.yaml
-
-      - name: Build UI bundle
-        # Required before any Go invocation: //go:embed all:dist in
-        # internal/serve/assets.go errors out if internal/serve/dist/
-        # is empty.
-        run: make ui
-
       - name: Go vet
         run: go vet -tags sqlite_fts5 ./...
 
@@ -66,14 +44,8 @@ jobs:
       - name: Go test
         # -race: Go's runtime data-race detector. Instruments memory
         # accesses across goroutines and panics on a detected race —
-        # the realistic dynamic-analysis tool for a pure-Go HTTP +
-        # tmux-shelling-out daemon. Satisfies the OpenSSF Best
+        # the realistic dynamic-analysis tool for a goroutine-heavy
+        # CLI that shells out to tmux. Satisfies the OpenSSF Best
         # Practices `dynamic_analysis` and
         # `dynamic_analysis_enable_assertions` criteria.
         run: go test -tags sqlite_fts5 -race ./...
-
-      - name: UI typecheck
-        run: pnpm -C ui exec tsc --noEmit
-
-      - name: UI test
-        run: pnpm -C ui test

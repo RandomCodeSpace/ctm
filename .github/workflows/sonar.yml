@@ -5,10 +5,10 @@
 # in-flight scans.
 #
 # Coverage is collected fresh in this workflow rather than reused from
-# CI — Sonar needs both go-coverprofile and lcov in the same workspace
-# pass, and the existing CI job runs `go test` without -coverprofile.
-# Adding coverage there would slow every PR build; keeping it here
-# isolates the cost to the Sonar job.
+# CI — Sonar needs the go-coverprofile in the same workspace pass, and
+# the existing CI job runs `go test` without -coverprofile. Adding
+# coverage there would slow every PR build; keeping it here isolates
+# the cost to the Sonar job.
 
 name: SonarCloud
 
@@ -44,44 +44,12 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Set up pnpm
-        # Pinned to commit SHA (v4) per supply-chain hygiene — third-party
-        # actions can be rewritten under a moving tag. Bump by re-running
-        # `gh api repos/pnpm/action-setup/git/refs/tags/v4`.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 10.33.0
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: ui/pnpm-lock.yaml
-
-      - name: Build UI bundle
-        # Required before any Go test run: //go:embed all:dist in
-        # internal/serve/assets.go errors out if internal/serve/dist/
-        # is empty. Same as ci.yml.
-        run: make ui
-
       - name: Go test with coverage
         run: |
           go test -tags sqlite_fts5 \
             -coverprofile=coverage.out \
             -covermode=atomic \
             ./...
-
-      - name: UI install
-        # --ignore-scripts: refuse to execute lifecycle scripts from
-        # transitive deps (Sonar S6505). vitest + the React stack don't
-        # require any postinstall; esbuild ships per-platform binaries
-        # via optional deps. If a future dep needs a build step, add it
-        # to `pnpm.onlyBuiltDependencies` in ui/package.json instead.
-        run: pnpm -C ui install --frozen-lockfile --ignore-scripts
-
-      - name: UI test with coverage
-        run: pnpm -C ui exec vitest run --coverage
 
       - name: Detect SONAR_TOKEN
         id: token

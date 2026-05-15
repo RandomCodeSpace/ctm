@@ -11,12 +11,11 @@ Each release is identified by an immutable `vX.Y.Z` git tag.
 Releases are cut by the [`release.yml`](.github/workflows/release.yml)
 workflow. On every push to `main` the workflow:
 
-1. Builds the embedded UI (`make ui`).
-2. Runs the full Go test suite under the race detector
-   (`go test -tags sqlite_fts5 -race ./...`).
-3. Cross-compiles `linux-amd64`, `linux-arm64`, `darwin-amd64`,
+1. Runs the full Go test suite under the race detector
+   (`go test -race ./...`).
+2. Cross-compiles `linux-amd64`, `linux-arm64`, `darwin-amd64`,
    `darwin-arm64` binaries plus a vendored source tarball.
-4. Publishes a GitHub Release with `SHA256SUMS`, conventional-commit
+3. Publishes a GitHub Release with `SHA256SUMS`, conventional-commit
    grouped notes, and an air-gapped source archive.
 
 This in-repo file is the canonical, human-curated history. The
@@ -26,7 +25,109 @@ generated notes plus the signed checksums — see
 
 ## [Unreleased]
 
-No unreleased changes.
+### Changed
+
+- `internal/config/config.go` schema bumped to v2. Existing
+  `config.json` files with `required_in_path: ["claude", …]` are
+  migrated to `["codex", …]` on next `ctm` invocation. User
+  additions to the array are preserved.
+- `.bestpractices.json` refreshed for the post-daemon, codex-only
+  state: description swap, dropped `sqlite_fts5`/pnpm/playwright
+  build references, dropped non-existent CodeQL evidence, flipped
+  argon2id-related crypto criteria to N/A (auth subsystem removed),
+  reframed dynamic-analysis justification around the post-spawn
+  goroutine path. Maintainer still needs to click *Save (and
+  continue) 🤖* on bestpractices.dev project 12716 to re-ingest.
+
+### Fixed
+
+- Codex thread UUID is now discovered and stamped onto
+  `Session.AgentSessionID` post-spawn (5 s budget). Future reattach
+  uses `codex resume <uuid>` instead of falling through to
+  `codex resume --last`, so multi-session users land on the right
+  thread.
+
+## [0.3.0] — 2026-05-14
+
+**BREAKING.** ctm is now a pure CLI. The embedded web dashboard and
+the `ctm serve` HTTP daemon are gone entirely. Mobile-first SSH
+reattach (`ctm last`, `ctm pick`, OSC52 clipboard, Alt-prefix keys)
+remains the supported workflow.
+
+### Removed
+
+- The React web dashboard (`ui/` tree) and its build pipeline
+  (`make ui`, `pnpm`, `vite`, `playwright`).
+- The `ctm serve` HTTP daemon (`internal/serve/`) and its
+  `ctm serve` subcommand.
+- The `ctm auth` subcommand (single-user argon2id auth existed only
+  to gate the now-removed web UI). The `~/.config/ctm/auth.json`
+  password file is no longer read or written.
+- All HTTP API endpoints (status feed, quota, session CRUD,
+  remote-control bridge).
+- The SSE event bus and live tool-use feed used by the dashboard.
+- Outbound webhook delivery and webhook signing.
+- `~/.config/ctm/allowed_origins` and the Origin / CORS allow-list —
+  no HTTP surface remains to protect.
+- The bearer-token + Origin gate documented in earlier SECURITY.md
+  revisions.
+
+### Changed
+
+- `sessions.json` schema is unchanged from v3; existing sessions
+  attach normally after upgrade.
+- `release.yml` no longer builds the embedded UI; the release
+  artifact set is unchanged (binaries + `SHA256SUMS` + vendored
+  source tarball).
+- SECURITY.md scope narrowed to the CLI, the on-disk state files,
+  and supply-chain integrity. CONTRIBUTING.md drops UI / Playwright
+  / `pnpm` instructions.
+
+## [0.2.0] — 2026-05-14
+
+**BREAKING.** Anthropic's `claude` CLI is no longer supported.
+OpenAI's [`codex`](https://github.com/openai/codex) CLI (0.130.0+) is
+now the only supported agent. Existing `sessions.json` rows are
+migrated automatically on first launch.
+
+### Changed
+
+- `sessions.json` schema bumped to **v3**. The migrator rewrites any
+  legacy `agent="claude"` rows to `agent="codex"` in place. The
+  original bytes are preserved at `sessions.json.bak.<unix-nano>`
+  per the standard migration safety net.
+- Session resume now uses `codex resume <id> || codex` (with
+  `codex resume --last` available for the most recent session)
+  instead of `claude --resume … || claude --session-id …`.
+- YOLO mode now launches `codex --sandbox danger-full-access`
+  instead of `claude --dangerously-skip-permissions`. The git
+  checkpoint behaviour is unchanged.
+- README, SECURITY, and CONTRIBUTING rebranded: "Claude Tmux
+  Manager" → "Codex Tmux Manager". The short name `ctm` is unchanged.
+
+### Removed
+
+- `claude-overlay.json` (the `--settings`-layered overlay file).
+  Codex reads `~/.codex/config.toml` natively; ctm no longer
+  maintains an overlay layer.
+- `claude-env.json` / `env.sh` env-prelude. Codex's own
+  `shell_environment_policy` covers this; users needing extra env
+  should export from their own shell rc.
+- `ctm overlay` and all its subcommands (`init` / `edit` / `path`).
+- `ctm statusline` and the 3-line context-fill / rate-limit
+  renderer. Codex doesn't emit equivalent telemetry, so the tmux
+  statusline is now just session name + cwd + activity dot.
+- `ctm logs` and the PostToolUse JSONL hook tailer. Codex's hook
+  payload format differs and ctm no longer logs tool calls.
+- `~/.claude/projects/*/<uuid>.jsonl` log tailer — no codex
+  equivalent.
+
+### Added
+
+- `internal/agent/codex/` — the codex-specific Agent
+  implementation (invocation, resume, sandbox flags). Replaces the
+  previous claude-specific code path that lived under the same
+  `Agent` interface.
 
 ## [0.1.0] — 2026-04-18 onwards
 
