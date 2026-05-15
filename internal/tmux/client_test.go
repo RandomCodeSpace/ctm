@@ -8,16 +8,16 @@ import (
 )
 
 func TestBuildNewSessionArgs(t *testing.T) {
-	args := buildNewSessionArgs("myproject", "/home/dev/projects", "/tmp/ctm.conf", "claude --session-id abc")
-	expected := []string{"-f", "/tmp/ctm.conf", "new-session", "-d", "-s", "myproject", "-c", "/home/dev/projects", "claude --session-id abc"}
+	args := buildNewSessionArgs("myproject", "/home/dev/projects", "/tmp/ctm.conf", "codex resume abc")
+	expected := []string{"-f", "/tmp/ctm.conf", "new-session", "-d", "-s", "myproject", "-c", "/home/dev/projects", "codex resume abc"}
 	if !reflect.DeepEqual(args, expected) {
 		t.Errorf("got %v, want %v", args, expected)
 	}
 }
 
 func TestBuildNewSessionArgsEmptyConfPath(t *testing.T) {
-	args := buildNewSessionArgs("myproject", "/home/dev/projects", "", "claude --session-id abc")
-	expected := []string{"new-session", "-d", "-s", "myproject", "-c", "/home/dev/projects", "claude --session-id abc"}
+	args := buildNewSessionArgs("myproject", "/home/dev/projects", "", "codex resume abc")
+	expected := []string{"new-session", "-d", "-s", "myproject", "-c", "/home/dev/projects", "codex resume abc"}
 	if !reflect.DeepEqual(args, expected) {
 		t.Errorf("got %v, want %v", args, expected)
 	}
@@ -57,7 +57,7 @@ func TestBuildSwitchArgs(t *testing.T) {
 }
 
 func TestBuildRespawnPaneArgs(t *testing.T) {
-	shellCmd := "claude --resume abc-123 || claude --session-id abc-123"
+	shellCmd := "codex resume abc-123 || codex"
 	args := buildRespawnPaneArgs("myproject", shellCmd)
 	expected := []string{"respawn-pane", "-t", "myproject", "-k", "/bin/sh", "-c", shellCmd}
 	if !reflect.DeepEqual(args, expected) {
@@ -67,7 +67,7 @@ func TestBuildRespawnPaneArgs(t *testing.T) {
 
 func TestBuildRespawnPaneArgsShellCmdIsSingleArg(t *testing.T) {
 	// Verify the || fallback is passed as one argument to /bin/sh -c, not split
-	shellCmd := "claude --resume xyz || claude --session-id xyz"
+	shellCmd := "codex resume xyz || codex"
 	args := buildRespawnPaneArgs("sess", shellCmd)
 	// args[6] should be the entire shellCmd as one string
 	if args[6] != shellCmd {

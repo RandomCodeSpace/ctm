@@ -250,7 +250,7 @@ func (c *Client) SendKeys(target, keys string) error {
 
 // SendEnter sends the tmux "Enter" key (without -l) to the given
 // target. A literal `\n` via SendKeys is the LF character, which
-// TUIs like claude interpret as "insert newline", not "submit".
+// TUIs like codex interpret as "insert newline", not "submit".
 // Sending the Enter keybind triggers the real submit path.
 func (c *Client) SendEnter(target string) error {
 	if target == "" {

@@ -1,7 +1,7 @@
 // Package fsutil holds tiny, dependency-free filesystem helpers shared
 // across the codebase. Currently exports AtomicWriteFile, which replaces
 // the three near-identical copies that lived in
-// internal/claude/jsonpatch.go, internal/migrate/migrate.go, and
+// internal/migrate/migrate.go and
 // internal/jsonstrict/jsonstrict.go.
 package fsutil
 
