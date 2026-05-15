@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/RandomCodeSpace/ctm/internal/agent"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/doctor"
 	"github.com/RandomCodeSpace/ctm/internal/output"
@@ -41,7 +42,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// --- Dependencies ---
 	out.Bold("Dependencies:")
-	for _, dep := range []string{"tmux", "codex", "git"} {
+	deps := append([]string{"tmux"}, agent.Registered()...)
+	deps = append(deps, "git")
+	for _, dep := range deps {
 		if path, ok := doctor.LookupBinary(dep); ok {
 			out.Success("  [OK] %-10s %s", dep, path)
 		} else {

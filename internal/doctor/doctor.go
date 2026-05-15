@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/RandomCodeSpace/ctm/internal/agent"
 	"github.com/RandomCodeSpace/ctm/internal/config"
 	"github.com/RandomCodeSpace/ctm/internal/session"
 	"github.com/RandomCodeSpace/ctm/internal/tmux"
@@ -89,7 +90,8 @@ func Run(ctx context.Context, cfg config.Config) []Check {
 }
 
 func checkDependencies(_ context.Context, _ config.Config) []Check {
-	deps := []string{"tmux", "codex", "git"}
+	deps := append([]string{"tmux"}, agent.Registered()...)
+	deps = append(deps, "git")
 	out := make([]Check, 0, len(deps))
 	for _, dep := range deps {
 		c := Check{Name: "dep:" + dep}
