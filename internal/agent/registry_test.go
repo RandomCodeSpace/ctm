@@ -2,18 +2,20 @@ package agent_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/RandomCodeSpace/ctm/internal/agent"
 )
 
 type stubAgent struct{ name string }
 
-func (s stubAgent) Name() string                        { return s.name }
-func (s stubAgent) Binary() string                      { return s.name }
-func (s stubAgent) DefaultSessionName() string          { return s.name }
-func (s stubAgent) ProcessName() string                 { return s.name }
-func (s stubAgent) BuildCommand(agent.SpawnSpec) string { return "" }
-func (s stubAgent) YOLOFlag() []string                  { return nil }
+func (s stubAgent) Name() string                                       { return s.name }
+func (s stubAgent) Binary() string                                     { return s.name }
+func (s stubAgent) DefaultSessionName() string                         { return s.name }
+func (s stubAgent) ProcessName() string                                { return s.name }
+func (s stubAgent) BuildCommand(agent.SpawnSpec) string                { return "" }
+func (s stubAgent) YOLOFlag() []string                                 { return nil }
+func (s stubAgent) DiscoverSessionID(time.Time) (string, bool)         { return "", false }
 
 func TestRegister_ThenFor(t *testing.T) {
 	agent.Reset()
