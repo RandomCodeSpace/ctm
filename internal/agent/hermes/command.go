@@ -15,13 +15,16 @@ func shellQuote(s string) string {
 //
 // agentSessionID is the hermes session ID (Session.AgentSessionID). On
 // resume:
-//   - if non-empty: `hermes --resume <id>`
-//   - if empty:     `hermes -c` (continue most-recent)
+//   - if non-empty: `hermes --tui --resume <id>`
+//   - if empty:     `hermes --tui -c` (continue most-recent)
 //
-// In both resume branches the command falls back to a fresh `hermes` on
-// non-zero exit — matches codex's pattern for crash/Ctrl-C parity.
+// In both resume branches the command falls back to a fresh `hermes --tui`
+// on non-zero exit — matches codex's pattern for crash/Ctrl-C parity.
 // (Hermes itself exits 0 even on bad ID, so this fallback is purely
 // defensive against crashes during resume.)
+//
+// --tui is always passed: ctm only ever drives hermes through its TUI
+// surface.
 //
 // envExports, when non-empty, is prepended verbatim as a shell prelude.
 func BuildCommand(agentSessionID, mode string, resume bool, envExports string) string {
@@ -30,17 +33,17 @@ func BuildCommand(agentSessionID, mode string, resume bool, envExports string) s
 		yoloFlag = " --yolo"
 	}
 
-	freshCmd := "hermes" + yoloFlag
+	freshCmd := "hermes --tui" + yoloFlag
 
 	var core string
 	switch {
 	case !resume:
 		core = freshCmd
 	case agentSessionID != "":
-		core = fmt.Sprintf("hermes --resume %s%s || %s",
+		core = fmt.Sprintf("hermes --tui --resume %s%s || %s",
 			shellQuote(agentSessionID), yoloFlag, freshCmd)
 	default:
-		core = "hermes -c" + yoloFlag + " || " + freshCmd
+		core = "hermes --tui -c" + yoloFlag + " || " + freshCmd
 	}
 
 	if envExports != "" {
