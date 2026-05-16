@@ -67,14 +67,16 @@ func runAttach(cmd *cobra.Command, args []string) error {
 	sess, err := store.Get(name)
 	if err != nil {
 		// Session doesn't exist — create new
-		return createAndAttach(name, ".", cfg.DefaultMode, store, tc, out)
+		return createAndAttach(name, ".", cfg.DefaultMode, "", store, tc, out)
 	}
 
 	return preflight(sess, cfg, store, tc, out)
 }
 
-// createAndAttach creates a new session and attaches to it.
-func createAndAttach(name, workdir, _ string, store *session.Store, tc *tmux.Client, out *output.Printer) error {
+// createAndAttach creates a new session and attaches to it. agentName, when
+// non-empty, overrides session.DefaultAgent for this spawn (must already be
+// validated against the registry by the caller — see resolveAgent in yolo.go).
+func createAndAttach(name, workdir, _ string, agentName string, store *session.Store, tc *tmux.Client, out *output.Printer) error {
 	abs, err := filepath.Abs(workdir)
 	if err != nil {
 		return fmt.Errorf("resolving workdir: %w", err)
@@ -85,6 +87,7 @@ func createAndAttach(name, workdir, _ string, store *session.Store, tc *tmux.Cli
 	sess, err := session.Yolo(session.SpawnOpts{
 		Name:    name,
 		Workdir: abs,
+		Agent:   agentName,
 		Tmux:    tc,
 		Store:   store,
 	})

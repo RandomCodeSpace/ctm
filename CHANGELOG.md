@@ -27,6 +27,12 @@ generated notes plus the signed checksums — see
 
 ### Added
 
+- `--agent <name>` flag on `ctm new`, `ctm yolo`, `ctm yolo!`, and `ctm safe`.
+  Without the flag, sessions use `session.DefaultAgent`. With it, the chosen
+  agent (validated against `agent.Registered()`) overrides the default for
+  that spawn — e.g. `ctm new mytask --agent codex` to opt back into codex
+  when hermes is the default. Unknown agent values produce an error listing
+  the registered names.
 - Hermes agent support: `ctm new --agent hermes` and `ctm yolo --agent hermes`
   spawn a Hermes Agent (https://hermes-agent.dev) session with full resume +
   session-discovery parity to codex. `internal/agent/hermes/` mirrors
